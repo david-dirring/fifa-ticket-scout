@@ -72,8 +72,16 @@ extension/
 
 See [`STORE_LISTING.md`](STORE_LISTING.md) for the full store listing copy, required assets checklist, and submission steps.
 
+## Disclaimer
+
+This project is for **personal and educational use only**. It is not affiliated with, endorsed by, or connected to FIFA, Secutix, or any official ticketing partner. Use of this extension is at your own risk. The author is not responsible for any consequences resulting from its use, including but not limited to account restrictions on the ticketing platform. Please review and comply with the terms of service of any site you use this extension on.
+
 ## Support
 
 If you find this useful, consider buying me a coffee!
 
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-support-yellow?logo=buy-me-a-coffee&logoColor=white)](https://buymeacoffee.com/davidrd)
+
+## License
+
+[ISC](LICENSE)
