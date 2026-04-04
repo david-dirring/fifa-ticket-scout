@@ -165,7 +165,7 @@ function renderStatsBar(seats) {
 
 let activeCatIndex = -1;
 let currentCatData = [];
-let minTogether = 1; // 1 = "Any"
+let selectedTogether = new Set([1, 2, 3, 4, 5, 6]); // all ON by default
 
 function renderCategorySections(seats) {
   const tabsEl = document.getElementById("catTabs");
@@ -235,11 +235,17 @@ function renderCategorySections(seats) {
 
   // Build clusters first so we can filter seats by "together" count
   const allClusters = buildAllClusters(activeSeats);
-  const filteredClusters = allClusters.filter((c) => c.count >= minTogether);
+  const allOn = selectedTogether.size === 6;
+  const filteredClusters = allOn
+    ? allClusters
+    : allClusters.filter((c) => {
+        if (c.count >= 6) return selectedTogether.has(6);
+        return selectedTogether.has(c.count);
+      });
 
   // When filtering by together count, only use seats from qualifying clusters
   let displaySeats;
-  if (minTogether > 1) {
+  if (!allOn) {
     const qualifyingKeys = new Set();
     for (const c of filteredClusters) {
       for (const s of c.seats) qualifyingKeys.add(seatKey(s));
@@ -301,13 +307,13 @@ function renderCategorySections(seats) {
 
   const togetherBtns = [1, 2, 3, 4, 5, 6]
     .map((n) => {
-      const label = n === 1 ? "Any" : n + "+";
-      const active = minTogether === n ? "active" : "";
-      return `<button class="together-btn ${active}" data-min="${n}">${label}</button>`;
+      const label = n === 6 ? "6+" : String(n);
+      const active = selectedTogether.has(n) ? "active" : "";
+      return `<button class="together-btn ${active}" data-tog="${n}">${label}</button>`;
     })
     .join("");
 
-  const seatCount = minTogether > 1
+  const seatCount = !allOn
     ? `<span class="together-count">${displaySeats.length} seats</span>`
     : "";
 
@@ -328,7 +334,16 @@ function renderCategorySections(seats) {
   // Together-filter click handlers
   contentEl.querySelectorAll(".together-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
-      minTogether = parseInt(btn.dataset.min);
+      const n = parseInt(btn.dataset.tog);
+      if (selectedTogether.has(n)) {
+        selectedTogether.delete(n);
+      } else {
+        selectedTogether.add(n);
+      }
+      // If all toggled off, reset to all ON
+      if (selectedTogether.size === 0) {
+        selectedTogether = new Set([1, 2, 3, 4, 5, 6]);
+      }
       renderCategorySections(seats);
     });
   });
