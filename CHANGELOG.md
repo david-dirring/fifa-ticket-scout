@@ -6,6 +6,16 @@ All notable changes to FIFA Ticket Scout are documented here. Timestamps are in 
 
 ## April 4, 2026
 
+### Persist Filter State — 5:45 PM ET
+Category tab and seats-together selections now persist when the popup is closed and reopened. Previously all filters reset to defaults every time. Uses `chrome.storage.local` to save and restore state.
+
+**Files changed:** `popup.js`
+
+### Context-Aware Empty States — 5:30 PM ET
+The popup now detects whether you're on the FIFA site, a seat map, or elsewhere, and shows contextual guidance instead of a generic "No data captured yet" message. Includes an "Open FIFA Resale Site" button when off-site. Removed redundant refresh button. Larger, cleaner logo in empty state. Added `tabs` permission.
+
+**Files changed:** `popup.js`, `popup.html`, `popup.css`, `manifest.json`
+
 ### "Seats Together" Multi-Select Toggle — 5:02 PM ET
 Redesigned the seats-together filter from single-select "N+" buttons to multi-select toggle buttons (`1 | 2 | 3 | 4 | 5 | 6+`). All sizes are ON by default. Users toggle OFF sizes they don't want — for example, turning off "1" hides single seats. Multiple selections are supported (e.g. only "2" and "3" active). "6+" covers clusters of 6–8 consecutive seats. Toggling all off resets to all ON. Stats, histogram, and Best Deals all update to reflect the filter.
 
