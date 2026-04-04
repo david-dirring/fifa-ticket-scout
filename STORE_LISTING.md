@@ -120,6 +120,36 @@ English
 
 ---
 
+## Single Purpose
+
+```
+Display real-time resale ticket prices and seat availability for FIFA World Cup 2026 matches.
+```
+
+---
+
+## Permission Justifications
+
+### storage
+
+```
+Stores captured seat pricing and match data locally so the popup dashboard can display it. No data is sent externally.
+```
+
+### activeTab
+
+```
+Sends scan commands to the active FIFA resale ticket tab to request seat data from all stadium sections.
+```
+
+### Host permission
+
+```
+Injects a content script on fwc26-resale-usd.tickets.fifa.com to intercept seat pricing API responses as the user browses. The extension only runs on this single site.
+```
+
+---
+
 ## Store Listing Checklist
 
 - [ ] Create a Chrome Web Store developer account ($5 one-time fee)
