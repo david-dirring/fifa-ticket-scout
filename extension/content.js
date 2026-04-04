@@ -19,6 +19,7 @@ window.addEventListener("message", (event) => {
       completed: event.data.completed,
       total: event.data.total,
       status: event.data.status,
+      eta: event.data.eta,
     });
   }
 });

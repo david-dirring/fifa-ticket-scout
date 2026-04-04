@@ -132,6 +132,9 @@
     let foundSeats = 0;
     let consecutiveFailures = 0;
     const MAX_CONSECUTIVE_FAILURES = 5;
+    const DELAY_MIN = 200;
+    const DELAY_MAX = 700;
+    const AVG_DELAY = (DELAY_MIN + DELAY_MAX) / 2;
     const totalTiles = Math.ceil(mapMax / tileSize) * Math.ceil(mapMax / tileSize) * exclusiveValues.length;
 
     window.postMessage({
@@ -139,6 +142,7 @@
       completed: 0,
       total: totalTiles,
       status: "scanning",
+      eta: Math.round((totalTiles * AVG_DELAY) / 1000),
     }, "*");
 
     let aborted = false;
@@ -179,21 +183,32 @@
               if (consecutiveFailures === 1) {
                 console.warn("[FIFA Ticket Scout] Tile failed:", resp.status, errText.substring(0, 200));
               }
+              // Exponential backoff on failure
+              const backoff = Math.min(2000 * Math.pow(2, consecutiveFailures - 1), 15000);
+              console.log("[FIFA Ticket Scout] Backing off", backoff + "ms");
+              await new Promise((r) => setTimeout(r, backoff));
             }
           } catch (err) {
             consecutiveFailures++;
             console.warn("[FIFA Ticket Scout] Scan tile error:", err.message);
+            const backoff = Math.min(2000 * Math.pow(2, consecutiveFailures - 1), 15000);
+            await new Promise((r) => setTimeout(r, backoff));
           }
 
           completed++;
+          const remaining = totalTiles - completed;
+          const eta = Math.round((remaining * AVG_DELAY) / 1000);
           window.postMessage({
             type: "FIFA_TICKET_SCOUT_SCAN_PROGRESS",
             completed,
             total: totalTiles,
             status: completed >= totalTiles ? "done" : "scanning",
+            eta,
           }, "*");
 
-          await new Promise((r) => setTimeout(r, 200));
+          // Jittered delay between 200-700ms
+          const jitter = DELAY_MIN + Math.random() * (DELAY_MAX - DELAY_MIN);
+          await new Promise((r) => setTimeout(r, jitter));
         }
       }
     }
