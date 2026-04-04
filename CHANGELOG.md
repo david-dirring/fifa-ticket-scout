@@ -4,24 +4,20 @@ All notable changes to FIFA Ticket Scout are documented here. Timestamps are in 
 
 ---
 
-## [Unreleased]
-
-### Scan Reliability Improvements (branch: `claude/scan-jitter-backoff-eta`)
-- Randomized delay between scan requests (200–700ms jitter) to reduce CAPTCHA/bot detection triggers
-- Added exponential backoff on failed requests (2s, 4s, 8s, up to 15s cap) instead of immediately counting toward the abort threshold
-- Scan progress bar now shows estimated time remaining (e.g. "42% · ~12s left")
-
----
-
 ## April 4, 2026
 
-### "Seats Together" Filter — 12:49 PM ET
-Moved the together filter to the top of the content area (directly below category tabs) so it acts as a primary filter. Selecting a value like "3+" now filters the stats (cheapest/median/highest), the price distribution histogram, and the Best Deals cluster list — all update to reflect only seats from groups of that size or larger. Shows a seat count badge when filtering is active.
+### "Seats Together" Multi-Select Toggle
+Redesigned the seats-together filter from single-select "N+" buttons to multi-select toggle buttons (`1 | 2 | 3 | 4 | 5 | 6+`). All sizes are ON by default. Users toggle OFF sizes they don't want — for example, turning off "1" hides single seats. Multiple selections are supported (e.g. only "2" and "3" active). "6+" covers clusters of 6–8 consecutive seats. Toggling all off resets to all ON. Stats, histogram, and Best Deals all update to reflect the filter.
 
-**Files changed:** `popup.js`, `popup.css`
+**Files changed:** `popup.js`
 
-### "Seats Together" Filter (initial) — 12:41 PM ET
-Added a row of toggle buttons (`Any | 2 | 3 | 4 | 5 | 6`) to the Best Deals section, allowing users to filter seat clusters by minimum group size. For example, selecting "4" shows only groups where 4 or more consecutive same-price seats are available. Defaults to "Any" (no filtering).
+### Scan Reliability: Jitter, Backoff & ETA
+Merged scan improvements: randomized delay between requests (200–700ms jitter), exponential backoff on failures (2s → 15s cap), and estimated time remaining in the progress bar (e.g. "42% · ~12s left").
+
+**Files changed:** `injected.js`, `popup.js`, `background.js`, `content.js`
+
+### "Seats Together" Filter
+Added toggle buttons for filtering seat clusters by group size. Filter acts as a primary control — stats, histogram, and Best Deals all update to reflect the selected group sizes. Shows a seat count badge when filtering is active.
 
 **Files changed:** `popup.js`, `popup.css`
 
