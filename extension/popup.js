@@ -233,51 +233,94 @@ function renderCategorySections(seats) {
     activeColor = data.color || "#1a3d8f";
   }
 
-  const prices = activeSeats.map((s) => centsToUSD(s.price));
-  const sortedPrices = prices.slice().sort((a, b) => a - b);
-  const min = sortedPrices[0];
-  const max = sortedPrices[sortedPrices.length - 1];
-  const avg = prices.reduce((a, b) => a + b, 0) / prices.length;
-  const median = sortedPrices.length % 2 === 0
-    ? (sortedPrices[sortedPrices.length / 2 - 1] + sortedPrices[sortedPrices.length / 2]) / 2
-    : sortedPrices[Math.floor(sortedPrices.length / 2)];
-
-  const histHtml = buildDistribution(prices, activeColor);
+  // Build clusters first so we can filter seats by "together" count
   const allClusters = buildAllClusters(activeSeats);
-  const filtered = allClusters.filter((c) => c.count >= minTogether);
-  const clustersHtml = renderClusterPage(filtered, 0);
+  const filteredClusters = allClusters.filter((c) => c.count >= minTogether);
+
+  // When filtering by together count, only use seats from qualifying clusters
+  let displaySeats;
+  if (minTogether > 1) {
+    const qualifyingKeys = new Set();
+    for (const c of filteredClusters) {
+      for (const s of c.seats) qualifyingKeys.add(seatKey(s));
+    }
+    displaySeats = activeSeats.filter((s) => qualifyingKeys.has(seatKey(s)));
+  } else {
+    displaySeats = activeSeats;
+  }
+
+  const prices = displaySeats.map((s) => centsToUSD(s.price));
+  const sortedPrices = prices.slice().sort((a, b) => a - b);
+
+  let statsHtml, histHtml;
+  if (sortedPrices.length > 0) {
+    const min = sortedPrices[0];
+    const max = sortedPrices[sortedPrices.length - 1];
+    const avg = prices.reduce((a, b) => a + b, 0) / prices.length;
+    const median = sortedPrices.length % 2 === 0
+      ? (sortedPrices[sortedPrices.length / 2 - 1] + sortedPrices[sortedPrices.length / 2]) / 2
+      : sortedPrices[Math.floor(sortedPrices.length / 2)];
+
+    statsHtml = `
+      <div class="cat-stats">
+        <span class="cat-stat">
+          <span class="cat-stat-label">Cheapest</span>
+          <span class="price-green">$${formatPrice(min)}</span>
+        </span>
+        <span class="cat-stat">
+          <span class="cat-stat-label">Median</span>
+          <span class="price-white">$${formatPrice(median)}</span>
+          <span class="price-avg">avg $${formatPrice(avg)}</span>
+        </span>
+        <span class="cat-stat">
+          <span class="cat-stat-label">Highest</span>
+          <span class="price-red">$${formatPrice(max)}</span>
+        </span>
+      </div>`;
+    histHtml = buildDistribution(prices, activeColor);
+  } else {
+    statsHtml = `
+      <div class="cat-stats">
+        <span class="cat-stat">
+          <span class="cat-stat-label">Cheapest</span>
+          <span class="price-green">&mdash;</span>
+        </span>
+        <span class="cat-stat">
+          <span class="cat-stat-label">Median</span>
+          <span class="price-white">&mdash;</span>
+        </span>
+        <span class="cat-stat">
+          <span class="cat-stat-label">Highest</span>
+          <span class="price-red">&mdash;</span>
+        </span>
+      </div>`;
+    histHtml = "";
+  }
+
+  const clustersHtml = renderClusterPage(filteredClusters, 0);
 
   const togetherBtns = [1, 2, 3, 4, 5, 6]
     .map((n) => {
-      const label = n === 1 ? "Any" : String(n);
+      const label = n === 1 ? "Any" : n + "+";
       const active = minTogether === n ? "active" : "";
       return `<button class="together-btn ${active}" data-min="${n}">${label}</button>`;
     })
     .join("");
 
+  const seatCount = minTogether > 1
+    ? `<span class="together-count">${displaySeats.length} seats</span>`
+    : "";
+
   contentEl.innerHTML = `
-    <div class="cat-stats">
-      <span class="cat-stat">
-        <span class="cat-stat-label">Cheapest</span>
-        <span class="price-green">$${formatPrice(min)}</span>
-      </span>
-      <span class="cat-stat">
-        <span class="cat-stat-label">Median</span>
-        <span class="price-white">$${formatPrice(median)}</span>
-        <span class="price-avg">avg $${formatPrice(avg)}</span>
-      </span>
-      <span class="cat-stat">
-        <span class="cat-stat-label">Highest</span>
-        <span class="price-red">$${formatPrice(max)}</span>
-      </span>
-    </div>
-    ${histHtml}
-    <div class="cheapest-header">
-      Best Deals <span class="deals-count">${filtered.length} groups</span>
-    </div>
     <div class="together-filter">
       <span class="together-label">Seats together</span>
       <div class="together-btns">${togetherBtns}</div>
+      ${seatCount}
+    </div>
+    ${statsHtml}
+    ${histHtml}
+    <div class="cheapest-header">
+      Best Deals <span class="deals-count">${filteredClusters.length} groups</span>
     </div>
     <div id="clusterContainer">${clustersHtml}</div>
   `;
@@ -291,7 +334,7 @@ function renderCategorySections(seats) {
   });
 
   // Attach pagination handler
-  attachClusterPagination(filtered);
+  attachClusterPagination(filteredClusters);
 }
 
 function buildDistribution(prices, color) {
@@ -422,6 +465,7 @@ function buildAllClusters(seats) {
       count: consecutive.length,
       price: centsToUSD(seat.price),
       area: seat.area,
+      seats: consecutive,
     });
   }
 

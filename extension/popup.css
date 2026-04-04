@@ -553,7 +553,9 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 16px 6px;
+  padding: 6px 12px;
+  background: var(--gray-50);
+  border-bottom: 1px solid var(--border);
 }
 
 .together-label {
@@ -569,12 +571,12 @@ body {
 }
 
 .together-btn {
-  padding: 2px 8px;
+  padding: 4px 10px;
   background: var(--white);
   border: 1px solid var(--border-dark);
-  border-radius: 12px;
+  border-radius: 20px;
   color: var(--gray-600);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   font-family: inherit;
   cursor: pointer;
@@ -590,6 +592,13 @@ body {
   color: var(--white);
   background: var(--fifa-purple);
   border-color: var(--fifa-purple);
+}
+
+.together-count {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--gray-500);
+  margin-left: auto;
 }
 
 .clusters {
