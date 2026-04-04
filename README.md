@@ -68,6 +68,10 @@ extension/
 - No data collection whatsoever
 - The extension only activates on `fwc26-resale-usd.tickets.fifa.com`
 
+## Publishing to Chrome Web Store
+
+See [`STORE_LISTING.md`](STORE_LISTING.md) for the full store listing copy, required assets checklist, and submission steps.
+
 ## Support
 
 If you find this useful, consider buying me a coffee!
