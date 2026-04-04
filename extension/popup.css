@@ -182,14 +182,13 @@ body {
 }
 
 .empty-icon {
-  margin-bottom: 16px;
-  opacity: 0.5;
+  margin-bottom: 20px;
 }
 
 .empty-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--gray-700);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--gray-900);
   margin-bottom: 8px;
 }
 

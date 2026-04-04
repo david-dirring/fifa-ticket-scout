@@ -20,9 +20,8 @@ document.addEventListener("DOMContentLoaded", () => {
     chevron.classList.toggle("open", !isOpen);
   });
 
-  // Refresh buttons
+  // Refresh button
   document.getElementById("refreshBtn").addEventListener("click", loadData);
-  document.getElementById("emptyRefreshBtn").addEventListener("click", loadData);
 
   // Scan all sections
   document.getElementById("scanBtn").addEventListener("click", startScan);
@@ -41,38 +40,72 @@ document.addEventListener("DOMContentLoaded", () => {
 
 });
 
+async function getCurrentTabUrl() {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    return tab?.url || "";
+  } catch { return ""; }
+}
+
 function loadData() {
-  // Read storage directly — more reliable than messaging the service worker
-  chrome.storage.local.get(null, (data) => {
-    if (chrome.runtime.lastError || !data?.games) {
-      showEmpty();
-      return;
-    }
+  getCurrentTabUrl().then((url) => {
+    const isFifaSite = /\.tickets\.fifa\.com/.test(url);
+    const isSeatMap = isFifaSite && (/perfId=/.test(url) || /\/seat\//.test(url));
 
-    const games = data.games;
-    const gameIds = Object.keys(games);
+    chrome.storage.local.get(null, (data) => {
+      if (chrome.runtime.lastError || !data?.games) {
+        showEmpty(isFifaSite, isSeatMap);
+        return;
+      }
 
-    if (gameIds.length === 0) {
-      showEmpty();
-      return;
-    }
+      const games = data.games;
+      const gameIds = Object.keys(games);
 
-    const activeId = data.activeGame || gameIds[0];
-    const game = games[activeId];
+      if (gameIds.length === 0) {
+        showEmpty(isFifaSite, isSeatMap);
+        return;
+      }
 
-    if (!game) {
-      showEmpty();
-      return;
-    }
+      const activeId = data.activeGame || gameIds[0];
+      const game = games[activeId];
 
-    renderDashboard(game);
+      if (!game || Object.keys(game.seats || {}).length === 0) {
+        showEmpty(isFifaSite, isSeatMap);
+        return;
+      }
+
+      renderDashboard(game);
+    });
   });
 }
 
-function showEmpty() {
+function showEmpty(isFifaSite, isSeatMap) {
   document.getElementById("noData").style.display = "block";
   document.getElementById("dashboard").style.display = "none";
   document.getElementById("liveBadge").style.display = "none";
+
+  const title = document.getElementById("emptyTitle");
+  const hint = document.getElementById("emptyHint");
+  const action = document.getElementById("emptyAction");
+
+  if (isSeatMap) {
+    title.textContent = "Scanning\u2026";
+    hint.textContent = "Capturing seat data from the map. This usually takes a few seconds.";
+    action.style.display = "none";
+  } else if (isFifaSite) {
+    title.textContent = "Open a seat map";
+    hint.textContent = "You\u2019re on the FIFA ticket site \u2014 select a match and open its seat map to start capturing prices.";
+    action.style.display = "none";
+  } else {
+    title.textContent = "FIFA Ticket Scout";
+    hint.textContent = "Open the FIFA resale ticket site and browse a seat map to start capturing prices.";
+    action.textContent = "Open FIFA Resale Site";
+    action.style.display = "";
+    action.onclick = (e) => {
+      e.preventDefault();
+      chrome.tabs.create({ url: "https://fwc26-resale-usd.tickets.fifa.com" });
+    };
+  }
 }
 
 function renderDashboard(game) {
