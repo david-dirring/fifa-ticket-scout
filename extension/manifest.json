@@ -8,20 +8,20 @@
     "activeTab"
   ],
   "host_permissions": [
-    "*://fwc26-resale-*.tickets.fifa.com/*"
+    "*://*.tickets.fifa.com/*"
   ],
   "background": {
     "service_worker": "background.js"
   },
   "content_scripts": [
     {
-      "matches": ["*://fwc26-resale-*.tickets.fifa.com/*"],
+      "matches": ["*://*.tickets.fifa.com/*"],
       "js": ["injected.js"],
       "run_at": "document_start",
       "world": "MAIN"
     },
     {
-      "matches": ["*://fwc26-resale-*.tickets.fifa.com/*"],
+      "matches": ["*://*.tickets.fifa.com/*"],
       "js": ["content.js"],
       "run_at": "document_start"
     }
