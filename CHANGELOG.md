@@ -6,17 +6,17 @@ All notable changes to FIFA Ticket Scout are documented here. Timestamps are in 
 
 ## April 4, 2026
 
-### "Seats Together" Multi-Select Toggle
+### "Seats Together" Multi-Select Toggle — 5:02 PM ET
 Redesigned the seats-together filter from single-select "N+" buttons to multi-select toggle buttons (`1 | 2 | 3 | 4 | 5 | 6+`). All sizes are ON by default. Users toggle OFF sizes they don't want — for example, turning off "1" hides single seats. Multiple selections are supported (e.g. only "2" and "3" active). "6+" covers clusters of 6–8 consecutive seats. Toggling all off resets to all ON. Stats, histogram, and Best Deals all update to reflect the filter.
 
 **Files changed:** `popup.js`
 
-### Scan Reliability: Jitter, Backoff & ETA
+### Scan Reliability: Jitter, Backoff & ETA — 4:39 PM ET
 Merged scan improvements: randomized delay between requests (200–700ms jitter), exponential backoff on failures (2s → 15s cap), and estimated time remaining in the progress bar (e.g. "42% · ~12s left").
 
 **Files changed:** `injected.js`, `popup.js`, `background.js`, `content.js`
 
-### "Seats Together" Filter
+### "Seats Together" Filter — 12:49 PM ET
 Added toggle buttons for filtering seat clusters by group size. Filter acts as a primary control — stats, histogram, and Best Deals all update to reflect the selected group sizes. Shows a seat count badge when filtering is active.
 
 **Files changed:** `popup.js`, `popup.css`
