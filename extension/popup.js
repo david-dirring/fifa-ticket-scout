@@ -165,6 +165,7 @@ function renderStatsBar(seats) {
 
 let activeCatIndex = -1;
 let currentCatData = [];
+let minTogether = 1; // 1 = "Any"
 
 function renderCategorySections(seats) {
   const tabsEl = document.getElementById("catTabs");
@@ -243,7 +244,16 @@ function renderCategorySections(seats) {
 
   const histHtml = buildDistribution(prices, activeColor);
   const allClusters = buildAllClusters(activeSeats);
-  const clustersHtml = renderClusterPage(allClusters, 0);
+  const filtered = allClusters.filter((c) => c.count >= minTogether);
+  const clustersHtml = renderClusterPage(filtered, 0);
+
+  const togetherBtns = [1, 2, 3, 4, 5, 6]
+    .map((n) => {
+      const label = n === 1 ? "Any" : String(n);
+      const active = minTogether === n ? "active" : "";
+      return `<button class="together-btn ${active}" data-min="${n}">${label}</button>`;
+    })
+    .join("");
 
   contentEl.innerHTML = `
     <div class="cat-stats">
@@ -262,12 +272,26 @@ function renderCategorySections(seats) {
       </span>
     </div>
     ${histHtml}
-    <div class="cheapest-header">Best Deals <span class="deals-count">${allClusters.length} groups</span></div>
+    <div class="cheapest-header">
+      Best Deals <span class="deals-count">${filtered.length} groups</span>
+    </div>
+    <div class="together-filter">
+      <span class="together-label">Seats together</span>
+      <div class="together-btns">${togetherBtns}</div>
+    </div>
     <div id="clusterContainer">${clustersHtml}</div>
   `;
 
+  // Together-filter click handlers
+  contentEl.querySelectorAll(".together-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      minTogether = parseInt(btn.dataset.min);
+      renderCategorySections(seats);
+    });
+  });
+
   // Attach pagination handler
-  attachClusterPagination(allClusters);
+  attachClusterPagination(filtered);
 }
 
 function buildDistribution(prices, color) {

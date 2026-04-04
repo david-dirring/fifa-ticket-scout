@@ -547,6 +547,51 @@ body {
   border-top: 1px solid var(--gray-100);
 }
 
+/* Together filter */
+
+.together-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 16px 6px;
+}
+
+.together-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--gray-500);
+  white-space: nowrap;
+}
+
+.together-btns {
+  display: flex;
+  gap: 3px;
+}
+
+.together-btn {
+  padding: 2px 8px;
+  background: var(--white);
+  border: 1px solid var(--border-dark);
+  border-radius: 12px;
+  color: var(--gray-600);
+  font-size: 10px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.together-btn:hover {
+  color: var(--gray-800);
+  border-color: var(--gray-400);
+}
+
+.together-btn.active {
+  color: var(--white);
+  background: var(--fifa-purple);
+  border-color: var(--fifa-purple);
+}
+
 .clusters {
   padding: 2px 16px 4px;
 }
