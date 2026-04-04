@@ -26,14 +26,27 @@ A Chrome extension that tracks real-time seat prices for FIFA World Cup 2026 res
 
 ## Installation
 
-1. Clone or download this repository
+### Option 1: Chrome Web Store
+
+Install directly from the [Chrome Web Store](#) (link coming soon).
+
+### Option 2: Load from source
+
+No build step required — the extension runs as-is from the repo.
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/david-dirring/fifa-ticket-scout.git
+   ```
 2. Open `chrome://extensions` in Chrome
 3. Enable **Developer mode** (top right toggle)
-4. Click **Load unpacked** and select the `extension/` folder
+4. Click **Load unpacked** and select the `extension/` folder inside the cloned repo
 5. Navigate to the [FIFA World Cup 2026 Resale Tickets](https://fwc26-resale-usd.tickets.fifa.com) site and open any match seat map
 6. Click the extension icon to see the dashboard
 
-> **Note:** This is a Chrome-only extension using Manifest V3. It requires Chrome 88 or later.
+To update, just `git pull` and click the reload button on `chrome://extensions`.
+
+> **Note:** Requires Chrome 88 or later (Manifest V3).
 
 ## How It Works
 
