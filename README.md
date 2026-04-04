@@ -5,6 +5,14 @@ A Chrome extension that tracks real-time seat prices for FIFA World Cup 2026 res
 ![Chrome Extension](https://img.shields.io/badge/Chrome-Extension-blue?logo=googlechrome&logoColor=white)
 ![Manifest V3](https://img.shields.io/badge/Manifest-V3-green)
 
+## Screenshots
+
+![Dashboard with seat map](store-assets/screenshot-1-dashboard.png)
+*Live dashboard showing match pricing alongside the FIFA seat map*
+
+![Best deals and actions](store-assets/screenshot-2-deals.png)
+*Best deals list, scan controls, and CSV export*
+
 ## Features
 
 - **Live seat capture** — Automatically intercepts seat data as you browse the FIFA resale ticket site
