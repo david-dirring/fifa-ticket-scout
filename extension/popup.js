@@ -7,7 +7,7 @@ document.addEventListener("DOMContentLoaded", () => {
       loadData();
     }
     if (message.type === "SCAN_PROGRESS") {
-      updateScanProgress(message.completed, message.total, message.status);
+      updateScanProgress(message.completed, message.total, message.status, message.eta);
     }
   });
 
@@ -667,12 +667,12 @@ function startScan() {
   });
 }
 
-function updateScanProgress(completed, total, status) {
+function updateScanProgress(completed, total, status, eta) {
   const pct = Math.round((completed / total) * 100);
   document.getElementById("progressFill").style.width = pct + "%";
-  document.getElementById("progressText").textContent = pct + "%";
 
   if (status === "done") {
+    document.getElementById("progressText").textContent = "Done!";
     const btn = document.getElementById("scanBtn");
     btn.disabled = false;
     document.getElementById("scanBtnText").textContent = "Scan Complete!";
@@ -680,5 +680,13 @@ function updateScanProgress(completed, total, status) {
       document.getElementById("scanBtnText").textContent = "Scan All Sections";
       document.getElementById("scanProgress").style.display = "none";
     }, 3000);
+  } else {
+    let label = pct + "%";
+    if (eta != null && eta > 0) {
+      label += eta >= 60
+        ? " · ~" + Math.ceil(eta / 60) + "m left"
+        : " · ~" + eta + "s left";
+    }
+    document.getElementById("progressText").textContent = label;
   }
 }

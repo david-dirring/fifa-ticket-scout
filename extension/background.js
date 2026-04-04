@@ -41,6 +41,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       completed: message.completed,
       total: message.total,
       status: message.status,
+      eta: message.eta,
     }).catch(() => {});
   }
 });
