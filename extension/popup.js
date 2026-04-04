@@ -74,6 +74,12 @@ function loadData() {
         return;
       }
 
+      // Restore persisted filters
+      if (data.filters) {
+        activeCatIndex = data.filters.activeCatIndex ?? -1;
+        selectedTogether = new Set(data.filters.selectedTogether ?? [1, 2, 3, 4, 5, 6]);
+      }
+
       renderDashboard(game);
     });
   });
@@ -198,6 +204,10 @@ function renderStatsBar(seats) {
 
 let activeCatIndex = -1;
 let currentCatData = [];
+
+function saveFilters() {
+  chrome.storage.local.set({ filters: { activeCatIndex, selectedTogether: [...selectedTogether] } });
+}
 let selectedTogether = new Set([1, 2, 3, 4, 5, 6]); // all ON by default
 
 function renderCategorySections(seats) {
@@ -250,6 +260,7 @@ function renderCategorySections(seats) {
   tabsEl.querySelectorAll(".cat-tab").forEach((btn) => {
     btn.addEventListener("click", () => {
       activeCatIndex = parseInt(btn.dataset.index);
+      saveFilters();
       renderCategorySections(seats);
     });
   });
@@ -377,6 +388,7 @@ function renderCategorySections(seats) {
       if (selectedTogether.size === 0) {
         selectedTogether = new Set([1, 2, 3, 4, 5, 6]);
       }
+      saveFilters();
       renderCategorySections(seats);
     });
   });
