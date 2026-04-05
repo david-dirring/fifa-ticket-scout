@@ -17,6 +17,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     processApiResponse(message.url, message.body);
   }
   if (message.type === "CLEAR_DATA") {
+    scannedGames.clear();
     chrome.storage.local.clear(() => {
       sendResponse({ ok: true });
     });

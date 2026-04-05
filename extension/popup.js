@@ -714,7 +714,7 @@ function startScan() {
       return;
     }
 
-    chrome.storage.local.clear(() => {
+    chrome.runtime.sendMessage({ type: "CLEAR_DATA" }, () => {
       document.getElementById("dashboard").style.display = "none";
       document.getElementById("noData").style.display = "block";
       document.getElementById("liveBadge").style.display = "none";
