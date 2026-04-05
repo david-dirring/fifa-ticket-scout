@@ -4,6 +4,25 @@ All notable changes to FIFA Ticket Scout are documented here. Timestamps are in 
 
 ---
 
+## April 5, 2026
+
+### Fix Clear & Rescan Not Recapturing Data — 11:27 AM ET
+Fixed bug where refreshing the page after Clear & Rescan wouldn't recapture seat data. Root cause: the `scannedGames` Set in the background service worker wasn't cleared when storage was wiped, so `autoScan` thought it had already scanned. Now sends `CLEAR_DATA` message to the background to reset both storage and in-memory state.
+
+**Files changed:** `background.js`, `popup.js`
+
+### Clear & Rescan Button — 11:09 AM ET
+Renamed "Scan All Sections" to "Clear & Rescan". Clicking it now clears all captured data and prompts the user to refresh their browser to repull fresh data. Simpler and more predictable than the previous background scan approach.
+
+**Files changed:** `popup.js`, `popup.html`
+
+### Clear Seats Before Scan — 8:12 PM ET (Apr 4)
+When a scan is triggered, existing seats for the game are now cleared first so the results are a fresh snapshot rather than accumulating stale data.
+
+**Files changed:** `background.js`
+
+---
+
 ## April 4, 2026
 
 ### Persist Filter State — 5:45 PM ET
