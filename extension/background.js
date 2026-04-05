@@ -23,6 +23,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
   if (message.type === "START_SCAN") {
+    // Clear existing seats for this game so the scan gives a fresh snapshot
+    const perfId = message.performanceId;
+    if (perfId) {
+      getStorage().then((data) => {
+        const games = data.games || {};
+        if (games[perfId]) {
+          games[perfId].seats = {};
+          chrome.storage.local.set({ games }, () => {
+            notifyDataUpdated();
+          });
+        }
+      });
+    }
     // Forward to the content script on the active tab
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       if (tabs[0]) {
