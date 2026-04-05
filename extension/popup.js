@@ -714,15 +714,13 @@ function startScan() {
       return;
     }
 
-    const btn = document.getElementById("scanBtn");
-    btn.disabled = true;
-    document.getElementById("scanBtnText").textContent = "Scanning...";
-    document.getElementById("scanProgress").style.display = "flex";
-
-    chrome.runtime.sendMessage({
-      type: "START_SCAN",
-      productId: game.productId,
-      performanceId: activeId,
+    chrome.storage.local.clear(() => {
+      document.getElementById("dashboard").style.display = "none";
+      document.getElementById("noData").style.display = "block";
+      document.getElementById("liveBadge").style.display = "none";
+      document.getElementById("emptyTitle").textContent = "Data cleared";
+      document.getElementById("emptyHint").textContent = "Click refresh in your browser to repull the data.";
+      document.getElementById("emptyAction").style.display = "none";
     });
   });
 }
