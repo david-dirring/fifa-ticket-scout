@@ -854,6 +854,10 @@ body {
   color: #e25555;
 }
 
+.footer-link.etsy:hover {
+  color: #F1641E;
+}
+
 .footer-sep {
   width: 1px;
   height: 12px;
