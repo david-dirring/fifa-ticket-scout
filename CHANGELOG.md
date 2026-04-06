@@ -4,6 +4,20 @@ All notable changes to FIFA Ticket Scout are documented here. Timestamps are in 
 
 ---
 
+## April 6, 2026
+
+### Etsy Shop Links — 9:18 AM ET
+Added links to My Son's Etsy Shop (fidgetforge6.etsy.com) in two places: replaced the refresh button in the header with an Etsy "E" icon (orange hover, tooltip "My Son's Etsy Shop"), and replaced the GitHub footer link with an Etsy footer link.
+
+**Files changed:** `popup.html`, `popup.css`, `popup.js`
+
+### Filter Out In-Cart Seats — 9:15 AM ET
+Seats with `exclusive=false` (likely locked in another user's cart but not yet purchased) are now excluded from the dashboard and CSV export. These seats appear in the API data but aren't actually available to buy, so showing them was misleading.
+
+**Files changed:** `popup.js`
+
+---
+
 ## April 5, 2026
 
 ### Fix Clear & Rescan Not Recapturing Data — 11:27 AM ET

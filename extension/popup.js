@@ -20,9 +20,6 @@ document.addEventListener("DOMContentLoaded", () => {
     chevron.classList.toggle("open", !isOpen);
   });
 
-  // Refresh button
-  document.getElementById("refreshBtn").addEventListener("click", loadData);
-
   // Scan all sections
   document.getElementById("scanBtn").addEventListener("click", startScan);
 
@@ -119,7 +116,7 @@ function renderDashboard(game) {
   document.getElementById("dashboard").style.display = "block";
   document.getElementById("liveBadge").style.display = "inline-flex";
 
-  const seats = Object.values(game.seats || {});
+  const seats = Object.values(game.seats || {}).filter(s => s.exclusive !== false);
   const match = game.match;
 
   renderMatchInfo(match);
@@ -628,7 +625,7 @@ function exportCSV() {
     const game = data.games[activeId];
     if (!game) return;
 
-    const seats = Object.values(game.seats || {});
+    const seats = Object.values(game.seats || {}).filter(s => s.exclusive !== false);
     if (seats.length === 0) return;
 
     const match = game.match;

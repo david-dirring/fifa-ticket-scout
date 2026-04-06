@@ -111,21 +111,19 @@ body {
   background: rgba(226, 85, 85, 0.08);
 }
 
-.refresh-btn {
-  background: none;
-  border: none;
+.header-etsy {
   color: var(--gray-400);
-  cursor: pointer;
   padding: 5px;
   border-radius: 6px;
   display: flex;
   align-items: center;
   transition: all 0.15s;
+  text-decoration: none;
 }
 
-.refresh-btn:hover {
-  color: var(--fifa-purple);
-  background: var(--fifa-purple-dim);
+.header-etsy:hover {
+  color: #F1641E;
+  background: rgba(241, 100, 30, 0.08);
 }
 
 .btn-small {
