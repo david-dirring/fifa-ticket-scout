@@ -38,10 +38,10 @@ See every available seat across all sections in one place. Total seat count, che
 Visual breakdown of how prices are spread within each ticket category. Instantly spot where the value is.
 
 ★ Best Deals Finder
-The extension groups consecutive seats at the same price and ranks them. Looking for 4 seats together at the lowest price? It's right there.
+The extension groups consecutive seats at the same price and ranks them. Looking for 4 seats together at the lowest price? It's right there. Use the seats-together toggle to filter by exact group size — select 2 and 3 to see only pairs and trios.
 
 ★ Category Filtering
-Toggle between ticket categories (Cat 1, Cat 2, etc.) to compare pricing. Each category shows its own stats: cheapest, median, average, and highest price.
+Toggle between ticket categories (Cat 1, Cat 2, etc.) to compare pricing. Each category shows its own stats: cheapest, median, average, and highest price. Your filter selections persist when you close and reopen the popup.
 
 ★ Block-by-Block Breakdown
 Collapsible table showing every stadium block with seat count, min price, and max price. Sort through the entire venue in seconds.
@@ -50,7 +50,10 @@ Collapsible table showing every stadium block with seat count, min price, and ma
 Download all seat data as a CSV file with match details, timestamps, and per-seat pricing. Great for analysis or sharing with your group.
 
 ★ Automatic Full Scan
-When you open a match, the extension scans all 50 map tiles automatically so you have complete data from the start. You can also trigger a manual re-scan anytime.
+When you open a match, the extension scans all 50 map tiles automatically so you have complete data from the start. Hit "Clear & Rescan" and refresh to get a fresh snapshot anytime.
+
+★ Smart Filtering
+Seats currently in another buyer's cart are automatically hidden so you only see what's actually available. No phantom listings cluttering your results.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -59,7 +62,7 @@ PRIVACY & SECURITY
 • All data stays in your browser — nothing is sent to any server
 • No analytics, no tracking, no data collection
 • No account required
-• The extension only runs on the official FIFA resale ticket site
+• The extension only runs on official FIFA resale ticket sites (all currencies: USD, CAD, EUR, etc.)
 • Open source: https://github.com/david-dirring/fifa-ticket-scout
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
