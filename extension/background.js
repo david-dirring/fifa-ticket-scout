@@ -17,9 +17,18 @@ const tabGameMap = {};
 
 chrome.tabs.onRemoved.addListener((tabId) => {
   delete tabGameMap[tabId];
-  // Clean up scanned entries for this tab
   for (const key of scannedGames) {
     if (key.startsWith(tabId + ":")) scannedGames.delete(key);
+  }
+});
+
+// On page refresh/navigation, clear scanned state so auto-scan fires again
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  if (changeInfo.status === "loading") {
+    delete tabGameMap[tabId];
+    for (const key of scannedGames) {
+      if (key.startsWith(tabId + ":")) scannedGames.delete(key);
+    }
   }
 });
 
@@ -212,7 +221,19 @@ function autoScan(performanceId, productId, tabId) {
   const key = tabId ? `${tabId}:${performanceId}` : performanceId;
   if (scannedGames.has(key)) return;
   scannedGames.add(key);
-  sendScanToTab(productId, performanceId, tabId);
+
+  // Clear old seats for a fresh snapshot before scanning
+  getStorage().then((data) => {
+    const games = data.games || {};
+    if (games[performanceId]) {
+      games[performanceId].seats = {};
+      chrome.storage.local.set({ games }, () => {
+        sendScanToTab(productId, performanceId, tabId);
+      });
+    } else {
+      sendScanToTab(productId, performanceId, tabId);
+    }
+  });
 }
 
 function sendScanToTab(productId, performanceId, tabId) {
