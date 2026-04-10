@@ -206,11 +206,18 @@ body {
   border-bottom: 1px solid var(--border);
 }
 
+.match-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
 .match-teams {
   font-size: 15px;
   font-weight: 700;
   color: var(--gray-900);
-  margin-bottom: 4px;
   letter-spacing: 0.2px;
 }
 
@@ -720,6 +727,81 @@ body {
 .scan-section {
   padding: 12px 16px;
   border-bottom: 1px solid var(--border);
+}
+
+.scan-speed-container {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--gray-50);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 3px 4px 3px 8px;
+  flex-shrink: 0;
+}
+
+.scan-speed-title {
+  font-size: 8px;
+  font-weight: 600;
+  color: var(--gray-400);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+.scan-speed-btns {
+  display: flex;
+  gap: 2px;
+}
+
+.speed-btn {
+  padding: 2px 4px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+  line-height: 1;
+}
+
+.speed-btn:hover {
+  background: var(--gray-100);
+}
+
+.speed-btn.active {
+  background: var(--fifa-purple-dim);
+  border-color: var(--fifa-purple);
+}
+
+.scan-pill {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.scan-pill-bar {
+  width: 24px;
+  height: 10px;
+  background: var(--gray-200);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.scan-pill-text {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--gray-500);
+  white-space: nowrap;
+  min-width: 20px;
+}
+
+.scan-pill-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--fifa-purple);
+  border-radius: 5px;
 }
 
 .btn-scan {

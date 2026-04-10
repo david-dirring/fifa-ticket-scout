@@ -7,7 +7,7 @@ document.addEventListener("DOMContentLoaded", () => {
       loadData();
     }
     if (message.type === "SCAN_PROGRESS") {
-      updateScanProgress(message.completed, message.total, message.status, message.eta);
+      updateScanProgress(message.performanceId, message.completed, message.total, message.status, message.eta);
     }
   });
 
@@ -47,7 +47,7 @@ async function getCurrentTabUrl() {
 function loadData() {
   getCurrentTabUrl().then((url) => {
     const isFifaSite = /\.tickets\.fifa\.com/.test(url);
-    const isSeatMap = isFifaSite && (/perfId=/.test(url) || /\/seat\//.test(url));
+    const isSeatMap = isFifaSite && (/perfId=/.test(url) || /\/seat\//.test(url) || /\/performance\/\d+/.test(url));
 
     chrome.storage.local.get(null, (data) => {
       if (chrome.runtime.lastError || !data?.games) {
@@ -63,7 +63,11 @@ function loadData() {
         return;
       }
 
-      const activeId = data.activeGame || gameIds[0];
+      // Match game to active tab's perfId, fallback to first game
+      // Match perfId from query string (?perfId=123) or path (/performance/123/)
+      const perfIdMatch = url.match(/perfId=(\d+)/) || url.match(/\/performance\/(\d+)/);
+      const tabPerfId = perfIdMatch ? perfIdMatch[1] : null;
+      const activeId = (tabPerfId && games[tabPerfId]) ? tabPerfId : gameIds[0];
       const game = games[activeId];
 
       if (!game || Object.keys(game.seats || {}).length === 0) {
@@ -77,6 +81,7 @@ function loadData() {
         selectedTogether = new Set(data.filters.selectedTogether ?? [1, 2, 3, 4, 5, 6]);
       }
 
+      currentPerfId = activeId;
       renderDashboard(game);
     });
   });
@@ -116,7 +121,7 @@ function renderDashboard(game) {
   document.getElementById("dashboard").style.display = "block";
   document.getElementById("liveBadge").style.display = "inline-flex";
 
-  const seats = Object.values(game.seats || {}).filter(s => s.exclusive !== false);
+  const seats = Object.values(game.seats || {}).filter(s => s.exclusive !== false && s.price != null);
   const match = game.match;
 
   renderMatchInfo(match);
@@ -127,8 +132,27 @@ function renderDashboard(game) {
 
 // --- Match Info ---
 
+function scanSpeedHtml() {
+  return `<div class="scan-speed-container">
+    <span class="scan-speed-title">Scan</span>
+    <div class="scan-speed-btns" id="scanSpeedBtns">
+      <button class="speed-btn" data-speed="stealth" title="Stealth &#8212; Looks like a human casually browsing. Lowest detection risk.">&#x1F422;</button>
+      <button class="speed-btn" data-speed="cautious" title="Cautious &#8212; Slower, good for accounts with tickets you can't afford to lose.">&#x1F6B6;</button>
+      <button class="speed-btn active" data-speed="balanced" title="Balanced &#8212; Good mix of speed and safety. Recommended.">&#x2696;&#xFE0F;</button>
+      <button class="speed-btn" data-speed="aggressive" title="Aggressive &#8212; Fastest scan. Higher detection risk.">&#x1F525;</button>
+    </div>
+    <div class="scan-pill" id="scanPill"><div class="scan-pill-bar"><div class="scan-pill-fill" id="scanPillFill"></div></div><span class="scan-pill-text" id="scanPillText"></span></div>
+  </div>`;
+}
+
+let lastMatchName = null;
+
 function renderMatchInfo(match) {
   const el = document.getElementById("matchInfo");
+
+  // Skip re-render if match info hasn't changed (avoids pill/speed flicker)
+  if (el.children.length > 0 && (match?.name ?? null) === lastMatchName) return;
+  lastMatchName = match?.name ?? null;
 
   if (match?.name) {
     const parts = match.name.split(" / ");
@@ -138,7 +162,10 @@ function renderMatchInfo(match) {
     const date = match.date ? formatDate(match.date) : "";
 
     el.innerHTML = `
-      <div class="match-teams">${escapeHtml(teams)}</div>
+      <div class="match-top-row">
+        <div class="match-teams">${escapeHtml(teams)}</div>
+        ${scanSpeedHtml()}
+      </div>
       <div class="match-meta">
         ${matchNum ? `<span>${escapeHtml(matchNum)}</span>` : ""}
         ${matchNum && venue ? `<span class="sep">&middot;</span>` : ""}
@@ -149,13 +176,65 @@ function renderMatchInfo(match) {
     `;
   } else {
     el.innerHTML = `
-      <div class="match-teams">Match data loading&hellip;</div>
+      <div class="match-top-row">
+        <div class="match-teams">Match data loading&hellip;</div>
+        ${scanSpeedHtml()}
+      </div>
       <div class="match-meta">Browse the seat map to capture match info</div>
     `;
+  }
+  initSpeedButtons();
+  restorePillProgress();
+}
+
+let lastPillPct = 0;
+let scanStartTime = 0;
+let scanElapsed = 0;
+let currentPerfId = null;
+
+function formatElapsed(ms) {
+  const s = Math.round(ms / 1000);
+  return Math.ceil(s / 2) * 2 + "s";
+}
+
+function restorePillProgress() {
+  const fill = document.getElementById("scanPillFill");
+  const text = document.getElementById("scanPillText");
+  const pct = lastPillPct > 0 ? lastPillPct : 100;
+  if (fill) fill.style.width = pct + "%";
+  if (text && scanElapsed > 0) {
+    text.textContent = formatElapsed(scanElapsed);
   }
 }
 
 // --- Stats Bar ---
+
+let cachedScanSpeed = null;
+
+function initSpeedButtons() {
+  const container = document.getElementById("scanSpeedBtns");
+  if (!container || container.dataset.listenersAttached) return;
+  container.dataset.listenersAttached = "1";
+  const btns = container.querySelectorAll(".speed-btn");
+  const apply = (speed) => {
+    btns.forEach((b) => b.classList.toggle("active", b.dataset.speed === speed));
+  };
+  if (cachedScanSpeed) {
+    apply(cachedScanSpeed);
+  } else {
+    chrome.storage.local.get("scanSpeed", (data) => {
+      cachedScanSpeed = data.scanSpeed || "balanced";
+      apply(cachedScanSpeed);
+    });
+  }
+  btns.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      cachedScanSpeed = btn.dataset.speed;
+      apply(cachedScanSpeed);
+      chrome.storage.local.set({ scanSpeed: cachedScanSpeed });
+    });
+  });
+}
 
 function renderStatsBar(seats) {
   const el = document.getElementById("statsBar");
@@ -621,11 +700,11 @@ function exportCSV() {
   chrome.storage.local.get(null, (data) => {
     if (!data?.games) return;
 
-    const activeId = data.activeGame || Object.keys(data.games)[0];
+    const activeId = currentPerfId || Object.keys(data.games)[0];
     const game = data.games[activeId];
     if (!game) return;
 
-    const seats = Object.values(game.seats || {}).filter(s => s.exclusive !== false);
+    const seats = Object.values(game.seats || {}).filter(s => s.exclusive !== false && s.price != null);
     if (seats.length === 0) return;
 
     const match = game.match;
@@ -697,42 +776,86 @@ function escapeHtml(str) {
 // --- Scan All Sections ---
 
 function startScan() {
-  chrome.storage.local.get(null, (data) => {
-    if (!data?.games) {
-      alert("No game data yet. Browse to a match seat map first.");
-      return;
-    }
+  getCurrentTabUrl().then((url) => {
+    const perfIdMatch = url.match(/perfId=(\d+)/);
+    const tabPerfId = perfIdMatch ? perfIdMatch[1] : null;
 
-    const activeId = data.activeGame || Object.keys(data.games)[0];
-    const game = data.games[activeId];
+    chrome.storage.local.get(null, (data) => {
+      if (!data?.games) {
+        alert("No game data yet. Browse to a match seat map first.");
+        return;
+      }
 
-    if (!game?.productId || !activeId) {
-      alert("Browse to a match seat map first so the extension can detect the game IDs.");
-      return;
-    }
+      const gameIds = Object.keys(data.games);
+      const activeId = (tabPerfId && data.games[tabPerfId]) ? tabPerfId : gameIds[0];
+      const game = data.games[activeId];
 
-    chrome.runtime.sendMessage({ type: "CLEAR_DATA" }, () => {
-      document.getElementById("dashboard").style.display = "none";
-      document.getElementById("noData").style.display = "block";
-      document.getElementById("liveBadge").style.display = "none";
-      document.getElementById("emptyTitle").textContent = "Data cleared";
-      document.getElementById("emptyHint").textContent = "Click refresh in your browser to repull the data.";
-      document.getElementById("emptyAction").style.display = "none";
+      if (!game?.productId || !activeId) {
+        alert("Browse to a match seat map first so the extension can detect the game IDs.");
+        return;
+      }
+
+      scanStartTime = 0;
+      scanElapsed = 0;
+      lastPillPct = 0;
+      lastMatchName = null;
+      chrome.runtime.sendMessage({ type: "CLEAR_DATA" }, () => {
+        document.getElementById("dashboard").style.display = "none";
+        document.getElementById("noData").style.display = "block";
+        document.getElementById("liveBadge").style.display = "none";
+        document.getElementById("emptyTitle").textContent = "Data cleared";
+        document.getElementById("emptyHint").textContent = "Click refresh in your browser to repull the data.";
+        document.getElementById("emptyAction").style.display = "none";
+      });
     });
   });
 }
 
-function updateScanProgress(completed, total, status, eta) {
+function updateScanProgress(perfId, completed, total, status, eta) {
+  // Only update progress for the currently displayed game
+  if (perfId && currentPerfId && perfId !== currentPerfId) return;
   const pct = Math.round((completed / total) * 100);
   document.getElementById("progressFill").style.width = pct + "%";
 
-  if (status === "done") {
+  // Track scan timing
+  if (pct > 0 && scanStartTime === 0) scanStartTime = Date.now();
+  if (status === "done" || status === "captcha") scanElapsed = Date.now() - scanStartTime;
+
+  // Update pill progress in match header
+  const snapped = status === "done" ? 100 : Math.floor(pct / 10) * 10;
+  lastPillPct = snapped;
+  const pillFill = document.getElementById("scanPillFill");
+  const pillText = document.getElementById("scanPillText");
+  if (pillFill) {
+    pillFill.style.width = snapped + "%";
+  }
+  if (pillText) {
+    if (status === "done") {
+      pillText.textContent = formatElapsed(scanElapsed);
+    } else {
+      pillText.textContent = snapped + "%";
+    }
+  }
+
+  if (status === "captcha") {
+    // Show rate limit warning in the empty state area
+    document.getElementById("noData").style.display = "block";
+    document.getElementById("emptyTitle").textContent = "Rate limited";
+    document.getElementById("emptyHint").textContent = "Bot detection was triggered. Wait about 5 minutes, then refresh the page to try again. Try a slower scan speed next time.";
+    document.getElementById("emptyAction").style.display = "none";
+
+    lastPillPct = 100;
+    if (pillFill) {
+      pillFill.style.width = "100%";
+      pillFill.style.background = "#d44040";
+    }
+  } else if (status === "done") {
     document.getElementById("progressText").textContent = "Done!";
     const btn = document.getElementById("scanBtn");
     btn.disabled = false;
     document.getElementById("scanBtnText").textContent = "Scan Complete!";
     setTimeout(() => {
-      document.getElementById("scanBtnText").textContent = "Scan All Sections";
+      document.getElementById("scanBtnText").textContent = "Clear & Rescan";
       document.getElementById("scanProgress").style.display = "none";
     }, 3000);
   } else {

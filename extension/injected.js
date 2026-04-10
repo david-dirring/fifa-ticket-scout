@@ -94,9 +94,9 @@
     if (event.source !== window) return;
     if (event.data?.type !== "FIFA_TICKET_SCOUT_SCAN") return;
 
-    const { productId, performanceId } = event.data;
+    const { productId, performanceId, scanSpeed } = event.data;
     if (!productId || !performanceId) return;
-    console.log("[FIFA Ticket Scout] Scan started for", performanceId);
+    console.log("[FIFA Ticket Scout] Scan started for", performanceId, "speed:", scanSpeed || "cautious");
 
     // Build headers — use captured ones or construct minimal required set
     const headers = capturedHeaders
@@ -124,21 +124,40 @@
     console.log("[FIFA Ticket Scout] Using headers:", Object.keys(headers).join(", "));
 
     const baseUrl = `/tnwr/v1/secure/seatmap/seats/free/ol`;
-    const tileSize = 20000;
-    const mapMax = 100000;
-    const exclusiveValues = [true, false];
+    const tileSize = 10000;
+    const mapMax = 40000;
+
+    // 10k tiles on 5k-aligned grid covering 0-40k (mimics site's native pattern)
+    const tiles = [];
+    for (let x = 0; x < mapMax; x += tileSize) {
+      for (let y = 0; y < mapMax; y += tileSize) {
+        tiles.push({ x, y, w: tileSize, h: tileSize });
+      }
+    }
+    const totalTiles = tiles.length;
+
+    const SPEED_PROFILES = {
+      stealth:    { min: 1300, max: 2275 },
+      cautious:   { min: 500,  max: 900 },
+      balanced:   { min: 900,  max: 1500 },
+      aggressive: { min: 0,    max: 0 },
+    };
+    const profile = SPEED_PROFILES[scanSpeed] || SPEED_PROFILES.balanced;
+    const DELAY_MIN = profile.min;
+    const DELAY_MAX = profile.max;
+    const AVG_DELAY = (DELAY_MIN + DELAY_MAX) / 2;
 
     let completed = 0;
     let foundSeats = 0;
-    let consecutiveFailures = 0;
-    const MAX_CONSECUTIVE_FAILURES = 5;
-    const DELAY_MIN = 200;
-    const DELAY_MAX = 700;
-    const AVG_DELAY = (DELAY_MIN + DELAY_MAX) / 2;
-    const totalTiles = Math.ceil(mapMax / tileSize) * Math.ceil(mapMax / tileSize) * exclusiveValues.length;
+    let consecutiveBlocks = 0;
+    let consecutiveEmpties = 0;
+    let foundAnySeats = false;
+    const MAX_CONSECUTIVE_BLOCKS = 3;
+    const MAX_CONSECUTIVE_EMPTIES = Math.max(Math.floor(totalTiles / 4), 5);
 
     window.postMessage({
       type: "FIFA_TICKET_SCOUT_SCAN_PROGRESS",
+      performanceId,
       completed: 0,
       total: totalTiles,
       status: "scanning",
@@ -146,79 +165,94 @@
     }, "*");
 
     let aborted = false;
-    for (const isExclusive of exclusiveValues) {
+    let abortReason = null;
+    for (const tile of tiles) {
       if (aborted) break;
-      for (let x = 0; x < mapMax; x += tileSize) {
-        if (aborted) break;
-        for (let y = 0; y < mapMax; y += tileSize) {
-          if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
-            console.warn("[FIFA Ticket Scout] Aborting scan after", MAX_CONSECUTIVE_FAILURES, "consecutive failures");
-            aborted = true;
-            break;
-          }
-
-          const bbox = x + "," + y + "," + tileSize + "," + tileSize;
-          const url = baseUrl + "?productId=" + productId + "&performanceId=" + performanceId + "&isSeasonTicketMode=false&advantageId=&isModifyAllSeatsMode=false&ppid=&reservationIdx=&crossSellId=&baseOperationIdsString=&bbox=" + bbox + "&isExclusive=" + isExclusive;
-
-          try {
-            const resp = await originalFetch(url, {
-              credentials: "include",
-              headers,
-            });
-            if (resp.ok) {
-              consecutiveFailures = 0;
-              const body = await resp.json();
-              const count = body.features ? body.features.length : 0;
-              if (count > 0) {
-                foundSeats += count;
-                console.log("[FIFA Ticket Scout] Tile found", count, "seats (total:", foundSeats + ")");
-              }
-              window.postMessage(
-                { type: "FIFA_TICKET_SCOUT", url: window.location.origin + url, body },
-                "*"
-              );
-            } else {
-              consecutiveFailures++;
-              const errText = await resp.text().catch(() => "");
-              if (consecutiveFailures === 1) {
-                console.warn("[FIFA Ticket Scout] Tile failed:", resp.status, errText.substring(0, 200));
-              }
-              // Exponential backoff on failure
-              const backoff = Math.min(2000 * Math.pow(2, consecutiveFailures - 1), 15000);
-              console.log("[FIFA Ticket Scout] Backing off", backoff + "ms");
-              await new Promise((r) => setTimeout(r, backoff));
-            }
-          } catch (err) {
-            consecutiveFailures++;
-            console.warn("[FIFA Ticket Scout] Scan tile error:", err.message);
-            const backoff = Math.min(2000 * Math.pow(2, consecutiveFailures - 1), 15000);
-            await new Promise((r) => setTimeout(r, backoff));
-          }
-
-          completed++;
-          const remaining = totalTiles - completed;
-          const eta = Math.round((remaining * AVG_DELAY) / 1000);
-          window.postMessage({
-            type: "FIFA_TICKET_SCOUT_SCAN_PROGRESS",
-            completed,
-            total: totalTiles,
-            status: completed >= totalTiles ? "done" : "scanning",
-            eta,
-          }, "*");
-
-          // Jittered delay between 200-700ms
-          const jitter = DELAY_MIN + Math.random() * (DELAY_MAX - DELAY_MIN);
-          await new Promise((r) => setTimeout(r, jitter));
-        }
+      if (consecutiveBlocks >= MAX_CONSECUTIVE_BLOCKS) {
+        console.warn("[FIFA Ticket Scout] Rate limited — stopping scan after", MAX_CONSECUTIVE_BLOCKS, "consecutive blocks");
+        window.postMessage({
+          type: "FIFA_TICKET_SCOUT_SCAN_PROGRESS",
+          performanceId,
+          completed: totalTiles,
+          total: totalTiles,
+          status: "captcha",
+        }, "*");
+        abortReason = "captcha";
+        aborted = true;
+        break;
       }
+      if (foundAnySeats && consecutiveEmpties >= MAX_CONSECUTIVE_EMPTIES) {
+        console.log("[FIFA Ticket Scout] Stopping early — no more seats in remaining tiles");
+        aborted = true;
+        break;
+      }
+
+      const bbox = tile.x + "," + tile.y + "," + tile.w + "," + tile.h;
+      const url = baseUrl + "?productId=" + productId + "&performanceId=" + performanceId + "&isSeasonTicketMode=false&advantageId=&isModifyAllSeatsMode=false&ppid=&reservationIdx=&crossSellId=&baseOperationIdsString=&bbox=" + bbox + "&isExclusive=true";
+
+      try {
+        const resp = await originalFetch(url, {
+          credentials: "include",
+          headers,
+        });
+        if (resp.ok) {
+          consecutiveBlocks = 0;
+          const body = await resp.json();
+          const count = body.features ? body.features.length : 0;
+          if (count > 0) {
+            foundSeats += count;
+            foundAnySeats = true;
+            consecutiveEmpties = 0;
+            console.log("[FIFA Ticket Scout] Tile found", count, "seats (total:", foundSeats + ")");
+          } else {
+            if (foundAnySeats) consecutiveEmpties++;
+          }
+          window.postMessage(
+            { type: "FIFA_TICKET_SCOUT", url: window.location.origin + url, body },
+            "*"
+          );
+        } else {
+          // Check for bot detection: non-JSON 403/429
+          const ct = resp.headers.get("content-type") || "";
+          if ((resp.status === 403 || resp.status === 429) && !ct.includes("application/json")) {
+            consecutiveBlocks++;
+            console.warn("[FIFA Ticket Scout] Tile blocked (", resp.status, ") —", consecutiveBlocks, "consecutive");
+          } else {
+            const errText = await resp.text().catch(() => "");
+            console.warn("[FIFA Ticket Scout] Tile failed:", resp.status, errText.substring(0, 200));
+          }
+        }
+      } catch (err) {
+        console.warn("[FIFA Ticket Scout] Scan tile error:", err.message);
+        const backoff = Math.min(2000 * Math.pow(2, consecutiveBlocks), 10000);
+        await new Promise((r) => setTimeout(r, backoff));
+      }
+
+      completed++;
+      const remaining = totalTiles - completed;
+      const eta = Math.round((remaining * (AVG_DELAY + 500)) / 1000);
+      window.postMessage({
+        type: "FIFA_TICKET_SCOUT_SCAN_PROGRESS",
+        performanceId,
+        completed,
+        total: totalTiles,
+        status: completed >= totalTiles ? "done" : "scanning",
+        eta,
+      }, "*");
+
+      const jitter = DELAY_MIN + Math.random() * (DELAY_MAX - DELAY_MIN);
+      await new Promise((r) => setTimeout(r, jitter));
     }
 
-    window.postMessage({
-      type: "FIFA_TICKET_SCOUT_SCAN_PROGRESS",
-      completed: totalTiles,
-      total: totalTiles,
-      status: "done",
-    }, "*");
-    console.log("[FIFA Ticket Scout] Scan", aborted ? "aborted" : "complete", ":", foundSeats, "seats found");
+    if (abortReason !== "captcha") {
+      window.postMessage({
+        type: "FIFA_TICKET_SCOUT_SCAN_PROGRESS",
+        performanceId,
+        completed: totalTiles,
+        total: totalTiles,
+        status: "done",
+      }, "*");
+    }
+    console.log("[FIFA Ticket Scout] Scan", aborted ? "aborted (" + (abortReason || "failures") + ")" : "complete", ":", foundSeats, "seats found");
   });
 })();

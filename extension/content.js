@@ -16,6 +16,7 @@ window.addEventListener("message", (event) => {
   if (event.data?.type === "FIFA_TICKET_SCOUT_SCAN_PROGRESS") {
     chrome.runtime.sendMessage({
       type: "SCAN_PROGRESS",
+      performanceId: event.data.performanceId,
       completed: event.data.completed,
       total: event.data.total,
       status: event.data.status,
@@ -31,6 +32,7 @@ chrome.runtime.onMessage.addListener((message) => {
       type: "FIFA_TICKET_SCOUT_SCAN",
       productId: message.productId,
       performanceId: message.performanceId,
+      scanSpeed: message.scanSpeed,
     }, "*");
   }
 });

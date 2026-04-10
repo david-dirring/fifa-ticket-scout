@@ -12,9 +12,22 @@ function notifyDataUpdated() {
   }, 500);
 }
 
+// Track which tab is showing which game
+const tabGameMap = {};
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  delete tabGameMap[tabId];
+  // Clean up scanned entries for this tab
+  for (const key of scannedGames) {
+    if (key.startsWith(tabId + ":")) scannedGames.delete(key);
+  }
+});
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  const tabId = sender?.tab?.id;
+
   if (message.type === "API_RESPONSE") {
-    processApiResponse(message.url, message.body);
+    processApiResponse(message.url, message.body, tabId);
   }
   if (message.type === "CLEAR_DATA") {
     scannedGames.clear();
@@ -37,21 +50,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
       });
     }
-    // Forward to the content script on the active tab
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      if (tabs[0]) {
-        chrome.tabs.sendMessage(tabs[0].id, {
-          type: "START_SCAN",
-          productId: message.productId,
-          performanceId: message.performanceId,
-        });
-      }
-    });
+    sendScanToTab(message.productId, message.performanceId, tabId);
   }
   if (message.type === "SCAN_PROGRESS") {
     // Forward progress to popup
     chrome.runtime.sendMessage({
       type: "SCAN_PROGRESS",
+      performanceId: message.performanceId,
       completed: message.completed,
       total: message.total,
       status: message.status,
@@ -60,19 +65,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
-async function processApiResponse(url, body) {
+async function processApiResponse(url, body, tabId) {
   if (!body) return;
 
   // Match info
   if (url.includes("google-ecommerce-detail") && body.ecommerceViewProduct) {
-    await saveMatchInfo(body.ecommerceViewProduct);
+    await saveMatchInfo(body.ecommerceViewProduct, tabId);
   }
 
   // Availability / price ranges
   if (url.includes("seatmap/availability") && body.priceRangeCategories) {
     const perfId = extractParam(url, "perfId");
     if (perfId) {
-      await saveAvailability(perfId, body);
+      await saveAvailability(perfId, body, tabId);
     }
   }
 
@@ -81,8 +86,7 @@ async function processApiResponse(url, body) {
     const perfId = extractParam(url, "performanceId");
     const prodId = extractParam(url, "productId");
     if (perfId) {
-      await saveSeats(perfId, body.features);
-      // Save productId for scan feature
+      await saveSeats(perfId, body.features, tabId);
       if (prodId) {
         await saveProductId(perfId, prodId);
       }
@@ -95,7 +99,7 @@ async function processApiResponse(url, body) {
     const prodId = extractParam(url, "productId");
     if (perfId && prodId) {
       await saveProductId(perfId, prodId);
-      autoScan(perfId, prodId);
+      autoScan(perfId, prodId, tabId);
     }
   }
 
@@ -107,24 +111,15 @@ function extractParam(url, param) {
     const u = new URL(url);
     return u.searchParams.get(param);
   } catch {
-    // Try regex fallback for relative URLs
     const match = url.match(new RegExp(`[?&]${param}=([^&]+)`));
     return match ? match[1] : null;
   }
 }
 
-async function saveMatchInfo(product) {
+async function saveMatchInfo(product, tabId) {
   const perfId = String(product.performanceId);
   const data = await getStorage();
-  const oldActive = data.activeGame;
-  let games = data.games || {};
-
-  // New game — keep only the new game's data (if any already captured)
-  if (oldActive && oldActive !== perfId) {
-    const existing = games[perfId] || emptyGame();
-    games = { [perfId]: existing };
-    scannedGames.clear();
-  }
+  const games = data.games || {};
 
   if (!games[perfId]) games[perfId] = emptyGame();
 
@@ -136,10 +131,11 @@ async function saveMatchInfo(product) {
     imgUrl: product.imgUrl,
   };
 
-  await chrome.storage.local.set({ games, activeGame: perfId });
+  if (tabId) tabGameMap[tabId] = perfId;
+  await chrome.storage.local.set({ games });
 }
 
-async function saveAvailability(perfId, body) {
+async function saveAvailability(perfId, body, tabId) {
   const data = await getStorage();
   const games = data.games || {};
 
@@ -162,10 +158,11 @@ async function saveAvailability(perfId, body) {
     lastUpdated: body.seatMapPriceRanges?.lastUpdated || null,
   };
 
-  await chrome.storage.local.set({ games, activeGame: perfId });
+  if (tabId) tabGameMap[tabId] = perfId;
+  await chrome.storage.local.set({ games });
 }
 
-async function saveSeats(perfId, features) {
+async function saveSeats(perfId, features, tabId) {
   const data = await getStorage();
   const games = data.games || {};
 
@@ -179,7 +176,6 @@ async function saveSeats(perfId, features) {
     const p = f.properties;
     if (!p) continue;
 
-    // Use seat ID as key to deduplicate
     const seatId = String(p.id);
     seats[seatId] = {
       block: p.block?.name?.en || "",
@@ -188,14 +184,15 @@ async function saveSeats(perfId, features) {
       seat: p.number || "",
       category: p.seatCategory || "",
       categoryId: p.seatCategoryId,
-      price: p.amount, // in cents
+      price: p.amount,
       color: p.color || "",
       exclusive: p.exclusive || false,
     };
   }
 
   games[perfId].seats = seats;
-  await chrome.storage.local.set({ games, activeGame: perfId });
+  if (tabId) tabGameMap[tabId] = perfId;
+  await chrome.storage.local.set({ games });
 }
 
 async function saveProductId(perfId, productId) {
@@ -208,20 +205,36 @@ async function saveProductId(perfId, productId) {
   await chrome.storage.local.set({ games });
 }
 
-// Track which games we've already auto-scanned so we don't re-scan on every page load
+// Track which tab+game combos we've already auto-scanned
 const scannedGames = new Set();
 
-function autoScan(performanceId, productId) {
-  if (scannedGames.has(performanceId)) return;
-  scannedGames.add(performanceId);
+function autoScan(performanceId, productId, tabId) {
+  const key = tabId ? `${tabId}:${performanceId}` : performanceId;
+  if (scannedGames.has(key)) return;
+  scannedGames.add(key);
+  sendScanToTab(productId, performanceId, tabId);
+}
 
-  // Send scan command to the active tab
-  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-    if (tabs[0]) {
-      chrome.tabs.sendMessage(tabs[0].id, {
+function sendScanToTab(productId, performanceId, tabId) {
+  chrome.storage.local.get("scanSpeed", (data) => {
+    const speed = data.scanSpeed || "balanced";
+    if (tabId) {
+      chrome.tabs.sendMessage(tabId, {
         type: "START_SCAN",
         productId,
         performanceId,
+        scanSpeed: speed,
+      });
+    } else {
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (tabs[0]) {
+          chrome.tabs.sendMessage(tabs[0].id, {
+            type: "START_SCAN",
+            productId,
+            performanceId,
+            scanSpeed: speed,
+          });
+        }
       });
     }
   });
