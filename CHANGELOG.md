@@ -4,6 +4,45 @@ All notable changes to FIFA Ticket Scout are documented here. Timestamps are in 
 
 ---
 
+## April 10, 2026
+
+### Retry Blocked Tiles — 6:31 PM ET
+When a tile gets blocked by bot detection (403), it's now retried after a 3-second cooldown instead of being permanently skipped. Blocked tiles are collected during the first pass, then retried as a batch. If still blocked, the scan completes with partial data instead of failing entirely.
+
+**Files changed:** `injected.js`
+
+### Clear Seats on Tab Re-navigate — 5:45 PM ET
+When navigating back to a previously scanned game on the same tab, old seat data is now cleared before the fresh scan starts. Also clears scanned state on page refresh via `chrome.tabs.onUpdated` so auto-scan always fires on reload.
+
+**Files changed:** `background.js`
+
+### Resilient 403 Handling — 4:30 PM ET
+Intermittent 403 blocks from DataDome are now skipped instead of aborting the entire scan. Only aborts after 3 consecutive blocks. Removed exponential backoff on 403s. Broadened CAPTCHA detection to catch any non-JSON 403/429 response.
+
+**Files changed:** `injected.js`
+
+### 10k Tile Grid (Mimics Site Pattern) — 3:00 PM ET
+Switched from a variable-size tile grid (20k/50k) to a fixed 4×4 grid of 10k×10k tiles covering 0-40k coordinate space. This matches the tile sizes and alignment the FIFA site's own client uses when a user clicks through blocks. Speed profiles now only control delay between tiles (16 tiles for all speeds). Significantly reduces bot detection triggers.
+
+**Files changed:** `injected.js`
+
+### Multi-Tab Support — 2:00 PM ET
+Multiple games can now be open in different tabs simultaneously. The popup auto-detects which game to show based on the active tab's URL. Scans route to the correct tab via `tabId` tracking. No more game data being wiped when switching between matches. Tab cleanup on close.
+
+**Files changed:** `background.js`, `popup.js`
+
+### Scan Speed UI — 12:00 PM ET
+Added scan speed selector (Stealth, Cautious, Balanced, Aggressive) in the match header with emoji buttons. Pill progress indicator shows scan percentage and elapsed time. Speed selection persists across popup open/close. Match info caching prevents UI flicker during scan updates.
+
+**Files changed:** `popup.js`, `popup.html`, `popup.css`, `background.js`, `content.js`, `injected.js`
+
+### $NaN Price Fix — 11:00 AM ET
+Seats with null/undefined prices are now filtered out of the dashboard and CSV export. Prevents "$NaN" from appearing in the stats bar.
+
+**Files changed:** `popup.js`
+
+---
+
 ## April 6, 2026
 
 ### Etsy Shop Links — 9:18 AM ET
