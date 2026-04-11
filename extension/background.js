@@ -57,7 +57,7 @@ async function getOrCreateVisitorId() {
   return visitorId;
 }
 
-function syncToSupabase(performanceId) {
+function syncToSupabase(performanceId, durationMs) {
   getStorage().then(async (data) => {
     const game = data.games?.[performanceId];
     if (!game?.seats || Object.keys(game.seats).length === 0) return;
@@ -72,6 +72,7 @@ function syncToSupabase(performanceId) {
       performanceId,
       match: game.match || {},
       seats: game.seats,
+      scanDurationMs: durationMs,
     };
 
     fetch(`${SUPABASE_URL}/functions/v1/ingest-scan`, {
@@ -174,6 +175,7 @@ function notifyDataUpdated() {
 
 // Track which tab is showing which game
 const tabGameMap = {};
+const scanStartTimes = {};
 
 chrome.tabs.onRemoved.addListener((tabId) => {
   delete tabGameMap[tabId];
@@ -240,6 +242,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     sendScanToTab(message.productId, message.performanceId, tabId);
   }
   if (message.type === "SCAN_PROGRESS") {
+    // Track scan timing
+    if (message.completed === 0 && message.status === "scanning") {
+      scanStartTimes[message.performanceId] = Date.now();
+    }
+
     // Forward progress to popup
     chrome.runtime.sendMessage({
       type: "SCAN_PROGRESS",
@@ -252,7 +259,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     // Sync to Supabase when scan completes
     if (message.status === "done") {
-      syncToSupabase(message.performanceId);
+      const startTime = scanStartTimes[message.performanceId];
+      const durationMs = startTime ? Date.now() - startTime : null;
+      delete scanStartTimes[message.performanceId];
+      syncToSupabase(message.performanceId, durationMs);
     }
   }
 });
