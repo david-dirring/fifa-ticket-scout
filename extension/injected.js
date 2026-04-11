@@ -239,7 +239,7 @@
           performanceId,
           completed,
           total: totalTiles,
-          status: completed >= totalTiles ? "done" : "scanning",
+          status: "scanning",
           eta,
         }, "*");
 
