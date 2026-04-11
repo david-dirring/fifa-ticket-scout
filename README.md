@@ -17,12 +17,16 @@ A Chrome extension that tracks real-time seat prices for FIFA World Cup 2026 res
 
 - **Live seat capture** — Automatically intercepts seat data as you browse the FIFA resale ticket site
 - **Auto-scan** — Automatically scans all map sections when you open a match, so you get full coverage without lifting a finger
+- **Multi-tab support** — Open multiple matches in different tabs, each tracked independently
+- **Scan speed control** — Choose from Stealth, Cautious, Balanced, or Aggressive scan speeds to balance speed vs. detection risk
 - **Price dashboard** — See total seats, cheapest and most expensive prices at a glance
 - **Category breakdown** — Filter seats by category with price distribution histograms showing cheapest, median, average, and highest prices
 - **Best deals finder** — Groups consecutive same-price seats and ranks them, with pagination
+- **Seats together filter** — Toggle by group size (1, 2, 3, 4, 5, 6+) to find exactly the number of consecutive seats you need
 - **Block-by-block view** — Collapsible table showing seat count and min/max prices per block
-- **Manual re-scan** — Trigger a full scan on demand if you want to refresh all sections
+- **Manual re-scan** — Clear & Rescan on demand for a fresh snapshot
 - **CSV export** — Export all seat data with match details and timestamps
+- **Resilient scanning** — Handles intermittent bot detection (403s) gracefully — skips blocked tiles, retries after cooldown
 
 ## Installation
 
@@ -52,13 +56,13 @@ To update, just `git pull` and click the reload button on `chrome://extensions`.
 
 The extension uses a multi-layer architecture to capture data from the FIFA ticketing platform:
 
-1. **`injected.js`** runs in the page's own context (MAIN world) and patches `fetch` and `XMLHttpRequest` to intercept API responses containing seat data, pricing, and match details. It also handles the full-scan feature by tiling the seat map into a 5x5 grid and requesting each section.
+1. **`injected.js`** runs in the page's own context (MAIN world) and patches `fetch` and `XMLHttpRequest` to intercept API responses containing seat data, pricing, and match details. It handles the full-scan feature by tiling the seat map into a 4×4 grid of 10k×10k tiles (matching the site's native tile pattern) with configurable scan speeds and jittered delays.
 
 2. **`content.js`** bridges the page context and the extension by relaying messages between `injected.js` and the background service worker.
 
-3. **`background.js`** processes incoming API data, deduplicates seats by ID, and stores everything in `chrome.storage.local`. It also auto-triggers a full scan when a new match is detected.
+3. **`background.js`** processes incoming API data, deduplicates seats by ID, and stores everything in `chrome.storage.local`. Tracks games per-tab for multi-tab support. Auto-triggers a full scan when a new match is detected. Handles license key verification for Pro features.
 
-4. **`popup.js` + `popup.html`** read from storage and render the dashboard UI — stats, histograms, best-deal clusters, and block breakdown.
+4. **`popup.js` + `popup.html`** read from storage and render the dashboard UI — stats, histograms, best-deal clusters, block breakdown, scan speed selector, and license management.
 
 Displayed prices include the platform's 15% service fee.
 
@@ -79,15 +83,30 @@ extension/
 ## Tech Stack
 
 - **Vanilla JavaScript** — no frameworks, no build step, no dependencies
-- **Chrome Manifest V3** APIs — `chrome.storage.local`, `chrome.runtime`, `chrome.tabs`
+- **Chrome Manifest V3** APIs — `chrome.storage.local`, `chrome.runtime`, `chrome.tabs`, `chrome.alarms`
 - **HTML/CSS** — hand-written popup UI
+
+## Free vs Pro
+
+The extension is fully functional for free. Pro features are optional upgrades:
+
+| Feature | Free | Pro |
+|---------|------|-----|
+| Live seat capture & dashboard | Yes | Yes |
+| Auto-scan (Balanced speed) | Yes | Yes |
+| Category filters, histograms, best deals | Yes | Yes |
+| CSV export | Yes | Yes |
+| Stealth, Cautious & Aggressive scan speeds | - | Yes |
+| Multi-tab (multiple matches at once) | - | Yes |
+
+Get a license key at [daviddirring.gumroad.com](https://daviddirring.gumroad.com/).
 
 ## Privacy
 
-- All data is stored locally in Chrome's extension storage
-- No external servers or analytics
-- No data collection whatsoever
-- The extension only activates on `fwc26-resale-usd.tickets.fifa.com`
+- All scan data is stored locally in Chrome's extension storage
+- License key verification goes through Gumroad's API only
+- No user tracking or analytics
+- The extension only activates on `*.tickets.fifa.com`
 
 ## Publishing to Chrome Web Store
 
