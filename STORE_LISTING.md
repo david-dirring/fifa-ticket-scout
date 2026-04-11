@@ -49,19 +49,38 @@ Collapsible table showing every stadium block with seat count, min price, and ma
 ★ CSV Export
 Download all seat data as a CSV file with match details, timestamps, and per-seat pricing. Great for analysis or sharing with your group.
 
+★ Scan Speed Control
+Choose from four scan speeds — Stealth, Cautious, Balanced, or Aggressive — to balance speed vs. detection risk. Stealth and Cautious are Pro features for users who want the lowest risk possible.
+
 ★ Automatic Full Scan
-When you open a match, the extension scans all 50 map tiles automatically so you have complete data from the start. Hit "Clear & Rescan" and refresh to get a fresh snapshot anytime.
+When you open a match, the extension scans all map sections automatically so you have complete data from the start. Hit "Clear & Rescan" and refresh to get a fresh snapshot anytime. Resilient to intermittent bot detection — skips blocked sections and retries.
+
+★ Multi-Tab Support (Pro)
+Open multiple matches in different tabs and track them all simultaneously. Free users can view one match at a time.
 
 ★ Smart Filtering
 Seats currently in another buyer's cart are automatically hidden so you only see what's actually available. No phantom listings cluttering your results.
+
+★ Crowdsourced Data
+Every scan contributes anonymously to a shared database. Pro users will soon get access to Market Intel — crowdsourced pricing data across all matches — plus a web dashboard with price trends and email alerts for price drops.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+FREE VS PRO
+
+The extension is fully functional for free. Pro unlocks extra scan speeds, multi-tab support, and upcoming features like Market Intel, a web dashboard, and price drop alerts.
+
+Get a license key at: https://daviddirring.gumroad.com/
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 PRIVACY & SECURITY
 
-• All data stays in your browser — nothing is sent to any server
-• No analytics, no tracking, no data collection
-• No account required
+• All scan data is stored locally in your browser
+• Scan results are synced anonymously — no personal information collected
+• Each install gets a random anonymous ID (not tied to any identity)
+• License key verification goes through Gumroad's API only
+• No analytics, no tracking
 • The extension only runs on official FIFA resale ticket sites (all currencies: USD, CAD, EUR, etc.)
 • Open source: https://github.com/david-dirring/fifa-ticket-scout
 
@@ -136,7 +155,7 @@ Display real-time resale ticket prices and seat availability for FIFA World Cup 
 ### storage
 
 ```
-Stores captured seat pricing and match data locally so the popup dashboard can display it. No data is sent externally.
+Stores captured seat pricing, match data, scan speed preference, and license key locally so the popup dashboard can display it and settings persist across sessions.
 ```
 
 ### activeTab
@@ -145,10 +164,26 @@ Stores captured seat pricing and match data locally so the popup dashboard can d
 Sends scan commands to the active FIFA resale ticket tab to request seat data from all stadium sections.
 ```
 
-### Host permission
+### tabs
 
 ```
-Injects a content script on fwc26-resale-usd.tickets.fifa.com to intercept seat pricing API responses as the user browses. The extension only runs on this single site.
+Detects which FIFA match the user is viewing in the active tab to show the correct game data. Enables multi-tab support for tracking multiple matches simultaneously.
+```
+
+### alarms
+
+```
+Periodically re-verifies Pro license keys (every 24 hours) to ensure they remain valid. Runs in the background without user interaction.
+```
+
+### Host permissions
+
+```
+*.tickets.fifa.com — Injects a content script to intercept seat pricing API responses as the user browses. The extension only runs on official FIFA resale ticket sites.
+
+api.gumroad.com — Verifies Pro license keys purchased through Gumroad.
+
+*.supabase.co — Syncs anonymous scan data to a shared database for crowdsourced pricing features.
 ```
 
 ---
