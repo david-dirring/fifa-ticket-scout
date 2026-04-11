@@ -10,9 +10,9 @@ const REVERIFY_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 // ============================================================
 
 const PRODUCTS = [
-  { productId: "fhwtc",  level: 10 },  // Scout Pro ($19.99)
-  { productId: "ylolae", level: 20 },  // Pro + Web ($29.99)
-  { productId: "gykspl", level: 30 },  // Pro + Web + Alerts ($49.99)
+  { productId: "qQRSGWNOL13FKrC3bHvmkA==",  level: 10 },  // Scout Pro ($19.99)
+  { productId: "_EOsxJwpud5MDG4IX3a-Ig==",   level: 20 },  // Pro + Web ($29.99)
+  { productId: "HEzB2VDD6QMDXaFiynXo5w==",   level: 30 },  // Pro + Web + Alerts ($49.99)
 ];
 
 // Returns { valid: true, test: bool } or { valid: false }
