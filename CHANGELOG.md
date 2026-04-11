@@ -6,6 +6,12 @@ All notable changes to FIFA Ticket Scout are documented here. Timestamps are in 
 
 ## April 11, 2026
 
+### Supabase Data Sync — 5:30 PM ET
+Every completed scan now syncs seat data to Supabase. All users (free and Pro) contribute crowdsourced data. Each install gets an anonymous visitor ID. Scan history is preserved as full snapshots for future price trend analysis. Match summaries are aggregated per match with hourly snapshots for trend charts. Sync is fire-and-forget — never blocks scanning, silently fails if backend is unreachable.
+
+**Files changed:** `background.js`, `manifest.json`
+**Files added:** `supabase/schema.sql`, `supabase/functions/ingest-scan/index.ts`
+
 ### Pro Tier & License Key System — 12:00 AM ET
 Added Gumroad-based license key verification with a numeric tier system (level 0/10/20/30). Free users get Balanced scan speed and single-game storage. Pro users (level 10+) unlock Stealth, Cautious, and Aggressive scan speeds plus multi-tab support. License section in the popup with activation/deactivation UI. Re-verifies license every 24 hours via `chrome.alarms`. Extension works identically if Gumroad is unreachable (cached license). License provider is modular — one function to swap if we change payment providers.
 

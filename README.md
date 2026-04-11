@@ -60,9 +60,11 @@ The extension uses a multi-layer architecture to capture data from the FIFA tick
 
 2. **`content.js`** bridges the page context and the extension by relaying messages between `injected.js` and the background service worker.
 
-3. **`background.js`** processes incoming API data, deduplicates seats by ID, and stores everything in `chrome.storage.local`. Tracks games per-tab for multi-tab support. Auto-triggers a full scan when a new match is detected. Handles license key verification for Pro features.
+3. **`background.js`** processes incoming API data, deduplicates seats by ID, and stores everything in `chrome.storage.local`. Tracks games per-tab for multi-tab support. Auto-triggers a full scan when a new match is detected. Handles license key verification for Pro features. Syncs scan data to Supabase after each completed scan (fire-and-forget).
 
 4. **`popup.js` + `popup.html`** read from storage and render the dashboard UI — stats, histograms, best-deal clusters, block breakdown, scan speed selector, and license management.
+
+5. **Supabase backend** stores crowdsourced scan data from all users. An Edge Function receives scan results, tracks the latest seat availability, computes per-match summaries, and archives full scan history for price trend analysis.
 
 Displayed prices include the platform's 15% service fee.
 
@@ -78,26 +80,35 @@ extension/
   popup.js         Dashboard rendering and interaction logic
   popup.css        All popup styles
   icons/           Extension icons (16, 48, 128px)
+supabase/
+  schema.sql         Database schema (tables, indexes, RLS policies)
+  functions/
+    ingest-scan/     Edge Function — receives and processes scan data
 ```
 
 ## Tech Stack
 
 - **Vanilla JavaScript** — no frameworks, no build step, no dependencies
 - **Chrome Manifest V3** APIs — `chrome.storage.local`, `chrome.runtime`, `chrome.tabs`, `chrome.alarms`
+- **Supabase** — Postgres database, Edge Functions for crowdsourced data sync
 - **HTML/CSS** — hand-written popup UI
 
 ## Free vs Pro
 
 The extension is fully functional for free. Pro features are optional upgrades:
 
-| Feature | Free | Pro |
-|---------|------|-----|
-| Live seat capture & dashboard | Yes | Yes |
-| Auto-scan (Balanced speed) | Yes | Yes |
-| Category filters, histograms, best deals | Yes | Yes |
-| CSV export | Yes | Yes |
-| Stealth, Cautious & Aggressive scan speeds | - | Yes |
-| Multi-tab (multiple matches at once) | - | Yes |
+| Feature | Free | Pro | Pro + Web | Pro + Web + Alerts |
+|---------|------|-----|-----------|-------------------|
+| Live seat capture & dashboard | Yes | Yes | Yes | Yes |
+| Auto-scan (Balanced speed) | Yes | Yes | Yes | Yes |
+| Category filters, histograms, best deals | Yes | Yes | Yes | Yes |
+| CSV export | Yes | Yes | Yes | Yes |
+| Contribute to crowdsourced data | Yes | Yes | Yes | Yes |
+| Stealth, Cautious & Aggressive scan speeds | - | Yes | Yes | Yes |
+| Multi-tab (multiple matches at once) | - | Yes | Yes | Yes |
+| View crowdsourced data | - | Coming soon | Coming soon | Coming soon |
+| Web dashboard with price trends | - | - | Coming soon | Coming soon |
+| Email alerts for price drops | - | - | - | Coming soon |
 
 Get a license key at [daviddirring.gumroad.com](https://daviddirring.gumroad.com/).
 
