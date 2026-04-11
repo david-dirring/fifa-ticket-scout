@@ -1,5 +1,106 @@
 // Background service worker — processes API data and stores it
 
+// --- Tier / License constants ---
+const TIERS = { FREE: 0, PRO: 10, PRO_WEB: 20, PRO_WEB_ALERTS: 30 };
+const REVERIFY_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+// ============================================================
+// LICENSE PROVIDER — swap this section to change providers
+// Must export: PRODUCTS array and verifyKey(productId, licenseKey) function
+// ============================================================
+
+const PRODUCTS = [
+  { productId: "fhwtc",  level: 10 },  // Scout Pro ($19.99)
+  { productId: "ylolae", level: 20 },  // Pro + Web ($29.99)
+  { productId: "gykspl", level: 30 },  // Pro + Web + Alerts ($49.99)
+];
+
+// Returns { valid: true, test: bool } or { valid: false }
+// Throws on network error
+async function verifyKey(productId, licenseKey) {
+  const resp = await fetch("https://api.gumroad.com/v2/licenses/verify", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      product_id: productId,
+      license_key: licenseKey,
+      increment_uses_count: "false",
+    }),
+  });
+  const result = await resp.json();
+  return { valid: !!result.success, test: result.purchase?.test || false };
+}
+
+// ============================================================
+// END LICENSE PROVIDER
+// ============================================================
+
+// --- Re-verify license on alarm ---
+chrome.alarms.create("reverify-license", { periodInMinutes: 1440 });
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === "reverify-license") reverifyLicense();
+});
+
+// Re-verify on service worker startup if stale
+getStorage().then((data) => {
+  if (data.license && Date.now() - data.license.verifiedAt > REVERIFY_INTERVAL_MS) {
+    reverifyLicense();
+  }
+});
+
+async function activateLicense(licenseKey) {
+  const trimmed = licenseKey.trim();
+  if (!trimmed) return { ok: false, error: "Please enter a license key." };
+
+  // Try each product, highest tier first
+  const sorted = [...PRODUCTS].sort((a, b) => b.level - a.level);
+
+  for (const product of sorted) {
+    try {
+      const result = await verifyKey(product.productId, trimmed);
+
+      if (result.valid) {
+        const license = {
+          key: trimmed,
+          level: product.level,
+          productId: product.productId,
+          verifiedAt: Date.now(),
+          test: result.test,
+        };
+        await chrome.storage.local.set({ license });
+        return { ok: true, level: product.level };
+      }
+    } catch (err) {
+      console.log("[FIFA Ticket Scout] License verify error:", err.message);
+      return { ok: false, error: "Could not verify license. Check your connection and try again." };
+    }
+  }
+
+  return { ok: false, error: "Invalid license key. Please check and try again." };
+}
+
+async function reverifyLicense() {
+  const data = await getStorage();
+  if (!data.license?.key) return;
+
+  const product = PRODUCTS.find((p) => p.productId === data.license.productId);
+  if (!product) return;
+
+  try {
+    const result = await verifyKey(product.productId, data.license.key);
+
+    if (result.valid) {
+      data.license.verifiedAt = Date.now();
+      await chrome.storage.local.set({ license: data.license });
+    } else {
+      await chrome.storage.local.remove("license");
+      chrome.runtime.sendMessage({ type: "LICENSE_CHANGED" }).catch(() => {});
+    }
+  } catch {
+    // Network error — keep cached license, retry next cycle
+  }
+}
+
 function emptyGame() {
   return { match: null, seats: {}, availability: null };
 }
@@ -40,8 +141,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   if (message.type === "CLEAR_DATA") {
     scannedGames.clear();
-    chrome.storage.local.clear(() => {
-      sendResponse({ ok: true });
+    // Preserve license when clearing scan data
+    chrome.storage.local.get("license", (prev) => {
+      chrome.storage.local.clear(() => {
+        if (prev.license) chrome.storage.local.set({ license: prev.license });
+        sendResponse({ ok: true });
+      });
+    });
+    return true;
+  }
+  if (message.type === "ACTIVATE_LICENSE") {
+    activateLicense(message.licenseKey).then(sendResponse);
+    return true;
+  }
+  if (message.type === "DEACTIVATE_LICENSE") {
+    chrome.storage.local.remove("license", () => sendResponse({ ok: true }));
+    return true;
+  }
+  if (message.type === "GET_LICENSE") {
+    chrome.storage.local.get("license", (data) => {
+      sendResponse({ license: data.license || null });
     });
     return true;
   }
@@ -79,6 +198,7 @@ async function processApiResponse(url, body, tabId) {
 
   // Match info
   if (url.includes("google-ecommerce-detail") && body.ecommerceViewProduct) {
+    await enforceGameLimit(String(body.ecommerceViewProduct.performanceId));
     await saveMatchInfo(body.ecommerceViewProduct, tabId);
   }
 
@@ -86,6 +206,7 @@ async function processApiResponse(url, body, tabId) {
   if (url.includes("seatmap/availability") && body.priceRangeCategories) {
     const perfId = extractParam(url, "perfId");
     if (perfId) {
+      await enforceGameLimit(perfId);
       await saveAvailability(perfId, body, tabId);
     }
   }
@@ -95,6 +216,7 @@ async function processApiResponse(url, body, tabId) {
     const perfId = extractParam(url, "performanceId");
     const prodId = extractParam(url, "productId");
     if (perfId) {
+      await enforceGameLimit(perfId);
       await saveSeats(perfId, body.features, tabId);
       if (prodId) {
         await saveProductId(perfId, prodId);
@@ -107,6 +229,7 @@ async function processApiResponse(url, body, tabId) {
     const perfId = extractParam(url, "performanceId");
     const prodId = extractParam(url, "productId");
     if (perfId && prodId) {
+      await enforceGameLimit(perfId);
       await saveProductId(perfId, prodId);
       autoScan(perfId, prodId, tabId);
     }
@@ -236,9 +359,27 @@ function autoScan(performanceId, productId, tabId) {
   });
 }
 
+// Free tier: only one game at a time — clear old game when switching
+async function enforceGameLimit(perfId) {
+  const data = await getStorage();
+  const level = data.license?.level || 0;
+  if (level >= TIERS.PRO) return;
+
+  const games = data.games || {};
+  const existingIds = Object.keys(games);
+  if (existingIds.length > 0 && !existingIds.includes(perfId)) {
+    await chrome.storage.local.set({ games: {} });
+  }
+}
+
 function sendScanToTab(productId, performanceId, tabId) {
-  chrome.storage.local.get("scanSpeed", (data) => {
-    const speed = data.scanSpeed || "balanced";
+  chrome.storage.local.get(["scanSpeed", "license"], (data) => {
+    let speed = data.scanSpeed || "balanced";
+    const level = data.license?.level || 0;
+    // Enforce: non-balanced speeds require Pro
+    if (speed !== "balanced" && level < TIERS.PRO) {
+      speed = "balanced";
+    }
     if (tabId) {
       chrome.tabs.sendMessage(tabId, {
         type: "START_SCAN",

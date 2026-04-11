@@ -6,10 +6,12 @@
   "permissions": [
     "storage",
     "activeTab",
-    "tabs"
+    "tabs",
+    "alarms"
   ],
   "host_permissions": [
-    "*://*.tickets.fifa.com/*"
+    "*://*.tickets.fifa.com/*",
+    "https://api.gumroad.com/*"
   ],
   "background": {
     "service_worker": "background.js"

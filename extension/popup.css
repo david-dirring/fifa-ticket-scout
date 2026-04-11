@@ -977,3 +977,171 @@ body {
 .section:nth-child(2) { animation-delay: 0.05s; }
 .section:nth-child(3) { animation-delay: 0.1s; }
 .section:nth-child(4) { animation-delay: 0.15s; }
+
+/* ---- Tier Badge ---- */
+
+.tier-badge {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+.tier-free {
+  background: var(--gray-100);
+  color: var(--gray-500);
+}
+
+.tier-pro {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #fff;
+}
+
+/* ---- License Section ---- */
+
+.license-form,
+.license-active {
+  padding: 12px 16px;
+}
+
+.license-hint {
+  font-size: 11px;
+  color: var(--gray-500);
+  margin-bottom: 10px;
+  line-height: 1.4;
+}
+
+.license-input-row {
+  display: flex;
+  gap: 8px;
+}
+
+.license-input {
+  flex: 1;
+  padding: 8px 10px;
+  border: 1px solid var(--border-dark);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-family: monospace;
+  color: var(--gray-800);
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.license-input:focus {
+  border-color: var(--fifa-purple);
+}
+
+.license-input.flash {
+  animation: inputFlash 0.3s ease 2;
+}
+
+@keyframes inputFlash {
+  0%, 100% { border-color: var(--fifa-purple); }
+  50% { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-dim); }
+}
+
+.btn-activate {
+  padding: 8px 16px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  background: var(--fifa-purple);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.btn-activate:hover {
+  background: var(--fifa-purple-light);
+}
+
+.btn-activate:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.license-error {
+  font-size: 11px;
+  color: var(--danger);
+  margin-top: 6px;
+}
+
+.upgrade-link {
+  display: inline-block;
+  margin-top: 10px;
+  font-size: 11px;
+  color: var(--fifa-purple);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.upgrade-link:hover {
+  text-decoration: underline;
+}
+
+.license-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--green);
+  margin-bottom: 6px;
+}
+
+.license-check {
+  font-size: 14px;
+}
+
+.license-key-display {
+  font-size: 11px;
+  font-family: monospace;
+  color: var(--gray-500);
+  margin-bottom: 10px;
+  word-break: break-all;
+}
+
+.btn-deactivate {
+  background: var(--white);
+  border: 1px solid var(--border-dark);
+  color: var(--gray-500);
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 4px 12px;
+  border-radius: var(--radius-sm);
+  transition: all 0.15s;
+}
+
+.btn-deactivate:hover {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+/* ---- Locked Speed Buttons ---- */
+
+.speed-btn.locked {
+  opacity: 0.45;
+  cursor: not-allowed;
+  position: relative;
+}
+
+.speed-btn.locked:hover {
+  background: var(--gray-100);
+}
+
+.lock-icon {
+  font-size: 7px;
+  position: absolute;
+  bottom: -1px;
+  right: -1px;
+}

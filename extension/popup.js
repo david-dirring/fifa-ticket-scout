@@ -1,5 +1,13 @@
+const TIERS = { FREE: 0, PRO: 10, PRO_WEB: 20, PRO_WEB_ALERTS: 30 };
+let userLevel = 0;
+
 document.addEventListener("DOMContentLoaded", () => {
-  loadData();
+  // Load license first, then data
+  chrome.runtime.sendMessage({ type: "GET_LICENSE" }, (resp) => {
+    userLevel = resp?.license?.level || 0;
+    loadData();
+    renderLicenseSection(resp?.license);
+  });
 
   // Listen for live updates from background
   chrome.runtime.onMessage.addListener((message) => {
@@ -9,12 +17,29 @@ document.addEventListener("DOMContentLoaded", () => {
     if (message.type === "SCAN_PROGRESS") {
       updateScanProgress(message.performanceId, message.completed, message.total, message.status, message.eta);
     }
+    if (message.type === "LICENSE_CHANGED") {
+      chrome.runtime.sendMessage({ type: "GET_LICENSE" }, (resp) => {
+        userLevel = resp?.license?.level || 0;
+        renderLicenseSection(resp?.license);
+        lastMatchName = null;
+        loadData();
+      });
+    }
   });
 
   // Block toggle
   document.getElementById("blockToggle").addEventListener("click", () => {
     const body = document.getElementById("blockBody");
     const chevron = document.querySelector("#blockToggle .chevron");
+    const isOpen = body.style.display !== "none";
+    body.style.display = isOpen ? "none" : "block";
+    chevron.classList.toggle("open", !isOpen);
+  });
+
+  // License toggle
+  document.getElementById("licenseToggle").addEventListener("click", () => {
+    const body = document.getElementById("licenseBody");
+    const chevron = document.querySelector("#licenseToggle .chevron");
     const isOpen = body.style.display !== "none";
     body.style.display = isOpen ? "none" : "block";
     chevron.classList.toggle("open", !isOpen);
@@ -133,13 +158,23 @@ function renderDashboard(game) {
 // --- Match Info ---
 
 function scanSpeedHtml() {
+  const locked = userLevel < TIERS.PRO;
+  const lock = '<span class="lock-icon">&#x1F512;</span>';
+
+  function speedBtn(speed, emoji, title) {
+    const isLocked = locked && speed !== "balanced";
+    const cls = isLocked ? "speed-btn locked" : "speed-btn";
+    const suffix = isLocked ? " (Pro)" : "";
+    return `<button class="${cls}" data-speed="${speed}" title="${title}${suffix}">${emoji}${isLocked ? lock : ""}</button>`;
+  }
+
   return `<div class="scan-speed-container">
     <span class="scan-speed-title">Scan</span>
     <div class="scan-speed-btns" id="scanSpeedBtns">
-      <button class="speed-btn" data-speed="stealth" title="Stealth &#8212; Looks like a human casually browsing. Lowest detection risk.">&#x1F422;</button>
-      <button class="speed-btn" data-speed="cautious" title="Cautious &#8212; Slower, good for accounts with tickets you can't afford to lose.">&#x1F6B6;</button>
-      <button class="speed-btn active" data-speed="balanced" title="Balanced &#8212; Good mix of speed and safety. Recommended.">&#x2696;&#xFE0F;</button>
-      <button class="speed-btn" data-speed="aggressive" title="Aggressive &#8212; Fastest scan. Higher detection risk.">&#x1F525;</button>
+      ${speedBtn("stealth", "&#x1F422;", "Stealth &#8212; Looks like a human casually browsing. Lowest detection risk.")}
+      ${speedBtn("cautious", "&#x1F6B6;", "Cautious &#8212; Slower, good for accounts with tickets you can't afford to lose.")}
+      ${speedBtn("balanced", "&#x2696;&#xFE0F;", "Balanced &#8212; Good mix of speed and safety. Recommended.")}
+      ${speedBtn("aggressive", "&#x1F525;", "Aggressive &#8212; Fastest scan. Higher detection risk.")}
     </div>
     <div class="scan-pill" id="scanPill"><div class="scan-pill-bar"><div class="scan-pill-fill" id="scanPillFill"></div></div><span class="scan-pill-text" id="scanPillText"></span></div>
   </div>`;
@@ -220,16 +255,45 @@ function initSpeedButtons() {
     btns.forEach((b) => b.classList.toggle("active", b.dataset.speed === speed));
   };
   if (cachedScanSpeed) {
+    // Clamp if user was Pro but downgraded
+    if (cachedScanSpeed !== "balanced" && userLevel < TIERS.PRO) {
+      cachedScanSpeed = "balanced";
+      chrome.storage.local.set({ scanSpeed: cachedScanSpeed });
+    }
     apply(cachedScanSpeed);
   } else {
     chrome.storage.local.get("scanSpeed", (data) => {
       cachedScanSpeed = data.scanSpeed || "balanced";
+      if (cachedScanSpeed !== "balanced" && userLevel < TIERS.PRO) {
+        cachedScanSpeed = "balanced";
+        chrome.storage.local.set({ scanSpeed: cachedScanSpeed });
+      }
       apply(cachedScanSpeed);
     });
   }
   btns.forEach((btn) => {
     btn.addEventListener("click", () => {
-      cachedScanSpeed = btn.dataset.speed;
+      const speed = btn.dataset.speed;
+
+      // Gate non-balanced speeds behind Pro
+      if (speed !== "balanced" && userLevel < TIERS.PRO) {
+        const licenseBody = document.getElementById("licenseBody");
+        const licenseToggle = document.getElementById("licenseToggle");
+        if (licenseBody.style.display === "none") {
+          licenseBody.style.display = "block";
+          licenseToggle.querySelector(".chevron").classList.add("open");
+        }
+        document.getElementById("licenseSection").scrollIntoView({ behavior: "smooth" });
+        const input = document.getElementById("licenseInput");
+        if (input) {
+          input.focus();
+          input.classList.add("flash");
+          setTimeout(() => input.classList.remove("flash"), 600);
+        }
+        return;
+      }
+
+      cachedScanSpeed = speed;
       apply(cachedScanSpeed);
       chrome.storage.local.set({ scanSpeed: cachedScanSpeed });
     });
@@ -771,6 +835,105 @@ function escapeHtml(str) {
   const div = document.createElement("div");
   div.textContent = str;
   return div.innerHTML;
+}
+
+// --- License UI ---
+
+function renderLicenseSection(license) {
+  const body = document.getElementById("licenseBody");
+  const badge = document.getElementById("tierBadge");
+
+  if (license && license.level > 0) {
+    const tierName = license.level >= 30 ? "Pro + Alerts"
+                   : license.level >= 20 ? "Pro + Web"
+                   : "Scout Pro";
+    badge.textContent = tierName;
+    badge.className = "tier-badge tier-pro";
+
+    body.innerHTML = `
+      <div class="license-active">
+        <div class="license-status">
+          <span class="license-check">&#10003;</span>
+          <span>${tierName} active</span>
+        </div>
+        <div class="license-key-display">${maskKey(license.key)}</div>
+        <button class="btn-deactivate" id="deactivateBtn">Deactivate</button>
+      </div>
+    `;
+
+    document.getElementById("deactivateBtn").addEventListener("click", () => {
+      if (confirm("Deactivate your license? You can re-activate anytime.")) {
+        chrome.runtime.sendMessage({ type: "DEACTIVATE_LICENSE" }, () => {
+          userLevel = 0;
+          renderLicenseSection(null);
+          lastMatchName = null;
+          loadData();
+        });
+      }
+    });
+  } else {
+    badge.textContent = "Free";
+    badge.className = "tier-badge tier-free";
+
+    body.innerHTML = `
+      <div class="license-form">
+        <p class="license-hint">Have a license key? Enter it below to unlock Pro features.</p>
+        <div class="license-input-row">
+          <input type="text" id="licenseInput" class="license-input"
+                 placeholder="XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX"
+                 spellcheck="false" autocomplete="off">
+          <button class="btn-activate" id="activateBtn">Activate</button>
+        </div>
+        <div class="license-error" id="licenseError" style="display:none;"></div>
+        <a href="https://daviddirring.gumroad.com/" target="_blank" class="upgrade-link">
+          Get a license &rarr;
+        </a>
+      </div>
+    `;
+
+    document.getElementById("activateBtn").addEventListener("click", handleActivate);
+    document.getElementById("licenseInput").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") handleActivate();
+    });
+  }
+}
+
+function maskKey(key) {
+  if (key.length <= 8) return key;
+  return key.substring(0, 8) + key.substring(8).replace(/[A-Z0-9]/gi, "*");
+}
+
+function handleActivate() {
+  const input = document.getElementById("licenseInput");
+  const errorEl = document.getElementById("licenseError");
+  const btn = document.getElementById("activateBtn");
+  const key = input.value.trim();
+
+  if (!key) {
+    errorEl.textContent = "Please enter a license key.";
+    errorEl.style.display = "block";
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = "Verifying\u2026";
+  errorEl.style.display = "none";
+
+  chrome.runtime.sendMessage({ type: "ACTIVATE_LICENSE", licenseKey: key }, (resp) => {
+    if (resp?.ok) {
+      userLevel = resp.level;
+      chrome.storage.local.get("license", (data) => {
+        renderLicenseSection(data.license);
+        lastMatchName = null;
+        loadData();
+      });
+    } else {
+      errorEl.textContent = resp?.error || "Verification failed.";
+      errorEl.style.display = "block";
+      btn.disabled = false;
+      btn.textContent = "Activate";
+    }
+  });
 }
 
 // --- Scan All Sections ---
