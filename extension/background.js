@@ -35,6 +35,65 @@ async function verifyKey(productId, licenseKey) {
 // END LICENSE PROVIDER
 // ============================================================
 
+// ============================================================
+// SUPABASE SYNC — fire-and-forget data sync after each scan
+// ============================================================
+
+const SUPABASE_URL = "https://yaydpahqlqwesqdddgfi.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlheWRwYWhxbHF3ZXNxZGRkZ2ZpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU5MDg1NDEsImV4cCI6MjA5MTQ4NDU0MX0.QQJuKz9Fnb_schlS6FEioMtyRvrJVBwAL71dzitZU-g";
+
+async function sha256(str) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function getOrCreateVisitorId() {
+  const data = await getStorage();
+  if (data.visitorId) return data.visitorId;
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  const visitorId = Array.from(bytes).map(b => b.toString(16).padStart(2, "0")).join("");
+  await chrome.storage.local.set({ visitorId });
+  return visitorId;
+}
+
+function syncToSupabase(performanceId) {
+  getStorage().then(async (data) => {
+    const game = data.games?.[performanceId];
+    if (!game?.seats || Object.keys(game.seats).length === 0) return;
+
+    const visitorId = await getOrCreateVisitorId();
+    const license = data.license;
+    const licenseHash = license?.key ? await sha256(license.key) : null;
+
+    const payload = {
+      visitorId,
+      licenseHash,
+      performanceId,
+      match: game.match || {},
+      seats: game.seats,
+    };
+
+    fetch(`${SUPABASE_URL}/functions/v1/ingest-scan`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+        "apikey": SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify(payload),
+    }).catch((err) => {
+      console.log("[FIFA Ticket Scout] Supabase sync failed (non-blocking):", err.message);
+    });
+  }).catch((err) => {
+    console.log("[FIFA Ticket Scout] Sync prep failed:", err.message);
+  });
+}
+
+// ============================================================
+// END SUPABASE SYNC
+// ============================================================
+
 // --- Re-verify license on alarm ---
 chrome.alarms.create("reverify-license", { periodInMinutes: 1440 });
 chrome.alarms.onAlarm.addListener((alarm) => {
@@ -190,6 +249,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       status: message.status,
       eta: message.eta,
     }).catch(() => {});
+
+    // Sync to Supabase when scan completes
+    if (message.status === "done") {
+      syncToSupabase(message.performanceId);
+    }
   }
 });
 
