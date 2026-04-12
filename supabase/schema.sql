@@ -18,6 +18,8 @@ CREATE TABLE scan_snapshots (
 CREATE INDEX idx_snapshots_perf ON scan_snapshots (performance_id);
 CREATE INDEX idx_snapshots_time ON scan_snapshots (scanned_at DESC);
 CREATE INDEX idx_snapshots_visitor ON scan_snapshots (visitor_id);
+CREATE INDEX idx_snapshots_perf_time ON scan_snapshots (performance_id, scanned_at DESC);
+CREATE INDEX idx_snapshots_visitor_time ON scan_snapshots (visitor_id, scanned_at DESC);
 
 -- Latest state per seat, upserted on each scan
 CREATE TABLE seats (
