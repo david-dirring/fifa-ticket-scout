@@ -53,7 +53,17 @@ Deno.serve(async (req) => {
       console.error("scan_snapshots insert error:", snapError);
     }
 
-    // 2. Upsert seats (latest state)
+    // 2. Replace seats for this match (delete old, insert fresh)
+    const { error: deleteError } = await supabase
+      .from("seats")
+      .delete()
+      .eq("performance_id", performanceId);
+
+    if (deleteError) {
+      console.error("seats delete error:", deleteError);
+    }
+
+    const now = new Date().toISOString();
     const seatRows = seatEntries.map(([seatId, s]: [string, any]) => ({
       performance_id: performanceId,
       seat_id: seatId,
@@ -66,18 +76,19 @@ Deno.serve(async (req) => {
       price: s.price ?? null,
       color: s.color || null,
       exclusive: s.exclusive ?? true,
-      last_seen_at: new Date().toISOString(),
+      last_seen_at: now,
+      first_seen_at: now,
     }));
 
-    // Upsert in chunks of 500
+    // Insert in chunks of 500
     for (let i = 0; i < seatRows.length; i += 500) {
       const chunk = seatRows.slice(i, i + 500);
       const { error: seatError } = await supabase
         .from("seats")
-        .upsert(chunk, { onConflict: "performance_id,seat_id", ignoreDuplicates: false });
+        .insert(chunk);
 
       if (seatError) {
-        console.error(`seats upsert error (chunk ${i}):`, seatError);
+        console.error(`seats insert error (chunk ${i}):`, seatError);
       }
     }
 
