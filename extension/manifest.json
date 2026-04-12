@@ -12,7 +12,8 @@
   "host_permissions": [
     "*://*.tickets.fifa.com/*",
     "https://api.gumroad.com/*",
-    "https://yaydpahqlqwesqdddgfi.supabase.co/*"
+    "https://yaydpahqlqwesqdddgfi.supabase.co/*",
+    "https://raw.githubusercontent.com/*"
   ],
   "background": {
     "service_worker": "background.js"

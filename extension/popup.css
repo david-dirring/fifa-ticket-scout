@@ -126,6 +126,30 @@ body {
   background: rgba(241, 100, 30, 0.08);
 }
 
+/* ---- Update Banner ---- */
+
+.update-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 6px 16px;
+  background: var(--fifa-purple-dim);
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--gray-700);
+}
+
+.update-banner a {
+  color: var(--fifa-purple);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.update-banner a:hover {
+  text-decoration: underline;
+}
+
 .btn-small {
   margin-top: 16px;
   padding: 6px 18px;
@@ -936,6 +960,10 @@ body {
 
 .footer-link.etsy:hover {
   color: #F1641E;
+}
+
+.footer-link.site:hover {
+  color: var(--fifa-purple);
 }
 
 .footer-sep {

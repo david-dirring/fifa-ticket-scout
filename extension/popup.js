@@ -9,6 +9,9 @@ document.addEventListener("DOMContentLoaded", () => {
     renderLicenseSection(resp?.license);
   });
 
+  // Check for updates
+  checkForUpdate();
+
   // Listen for live updates from background
   chrome.runtime.onMessage.addListener((message) => {
     if (message.type === "DATA_UPDATED") {
@@ -805,6 +808,33 @@ function exportCSV() {
     a.click();
     URL.revokeObjectURL(url);
   });
+}
+
+// --- Version Check ---
+
+function checkForUpdate() {
+  const current = chrome.runtime.getManifest().version;
+  fetch("https://raw.githubusercontent.com/david-dirring/fifa-ticket-scout/main/version.json")
+    .then(r => r.json())
+    .then(data => {
+      if (data.latest && compareVersions(data.latest, current) > 0) {
+        const banner = document.getElementById("updateBanner");
+        if (banner) banner.style.display = "flex";
+      }
+    })
+    .catch(() => {}); // silently fail
+}
+
+function compareVersions(a, b) {
+  const pa = a.split(".").map(Number);
+  const pb = b.split(".").map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const na = pa[i] || 0;
+    const nb = pb[i] || 0;
+    if (na > nb) return 1;
+    if (na < nb) return -1;
+  }
+  return 0;
 }
 
 // --- Utilities ---
