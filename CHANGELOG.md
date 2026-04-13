@@ -4,6 +4,15 @@ All notable changes to FIFA Ticket Scout are documented here. Timestamps are in 
 
 ---
 
+## April 13, 2026
+
+### Fix: Clear & Rescan No Longer Wipes Alerts — 12:00 AM ET
+The "Clear & Rescan" and "Clear Data" buttons on the Scanner tab were silently destroying the user's saved Alerts tab picks (matches, thresholds, category, seats) as a side effect. Root cause: the `CLEAR_DATA` background handler used `chrome.storage.local.clear()` and manually rescued only the `license` key, so any other top-level key (including `alertConfigs` and `visitorId`) got nuked. Replaced the clear-then-restore dance with a surgical `chrome.storage.local.remove("games")` — only the captured scan data is removed, everything else (Alerts picks, license, visitor ID, scan speed preference, filter state) is untouched. Forward-compatible: any future storage key automatically survives by default. Also fixes a silent secondary bug where `visitorId` (the anonymous Supabase attribution key) was being regenerated on every Clear & Rescan, inflating "unique scanners" stats and breaking per-user scan history correlation on the backend.
+
+**Files changed:** `background.js`
+
+---
+
 ## April 12, 2026
 
 ### Alerts Tab — Pro + Web + Alerts Tier — 10:00 PM ET

@@ -251,13 +251,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   if (message.type === "CLEAR_DATA") {
     scannedGames.clear();
-    // Preserve license when clearing scan data
-    chrome.storage.local.get("license", (prev) => {
-      chrome.storage.local.clear(() => {
-        if (prev.license) chrome.storage.local.set({ license: prev.license });
-        sendResponse({ ok: true });
-      });
-    });
+    // Surgical: only wipe the captured-scan data. Everything else
+    // (alertConfigs, license, visitorId, scanSpeed, filters) survives by
+    // default. Avoids the historical "restore the things I forgot to wipe"
+    // footgun where each new top-level storage key had to be added to a
+    // rescue whitelist.
+    chrome.storage.local.remove("games", () => sendResponse({ ok: true }));
     return true;
   }
   if (message.type === "ACTIVATE_LICENSE") {
