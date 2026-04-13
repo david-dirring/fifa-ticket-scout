@@ -53,6 +53,927 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* ---- Tab Bar ---- */
+
+.tab-bar {
+  display: flex;
+  background: var(--white);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 52px;
+  z-index: 9;
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 10px 8px;
+  background: none;
+  border: none;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gray-500);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s;
+}
+
+.tab-btn.active {
+  color: var(--fifa-purple);
+  border-bottom-color: var(--fifa-purple);
+}
+
+.tab-btn:hover:not(.active) {
+  color: var(--gray-800);
+}
+
+.tab-panel {
+  animation: fadeIn 0.15s ease;
+}
+
+/* ---- Insights Tab ---- */
+
+.insights-header {
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.insights-header h2 {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--gray-900);
+  margin: 0 0 4px 0;
+}
+
+.insights-subtitle {
+  font-size: 12px;
+  color: var(--gray-500);
+  margin: 0;
+}
+
+.insights-cards {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.insight-card {
+  padding: 14px;
+  background: var(--white);
+  border: 1px solid var(--border-dark);
+  border-radius: var(--radius);
+  transition: border-color 0.15s;
+}
+
+.insight-card:hover {
+  border-color: var(--fifa-purple);
+}
+
+.insight-card .card-icon {
+  font-size: 20px;
+  margin-bottom: 6px;
+}
+
+.card-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.card-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--gray-900);
+}
+
+.card-badge {
+  font-size: 9px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--gray-100);
+  color: var(--gray-500);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.card-desc {
+  font-size: 11px;
+  color: var(--gray-500);
+  margin: 0;
+  line-height: 1.4;
+}
+
+/* ---- Alerts Tab ---- */
+
+.alerts-header {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.alerts-header h2 {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--gray-900);
+  margin: 0;
+  flex-shrink: 0;
+}
+
+.alerts-subtitle {
+  font-size: 11px;
+  color: var(--gray-500);
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+}
+
+.alerts-locked {
+  padding: 20px 16px;
+  text-align: center;
+}
+
+.alerts-locked-icon {
+  font-size: 32px;
+  margin-bottom: 8px;
+}
+
+.alerts-locked-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--gray-800);
+  margin-bottom: 4px;
+}
+
+.alerts-locked-msg {
+  font-size: 12px;
+  color: var(--gray-500);
+  margin-bottom: 14px;
+  line-height: 1.5;
+}
+
+.btn-upgrade {
+  display: inline-block;
+  padding: 10px 20px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #fff;
+  text-decoration: none;
+  border-radius: var(--radius);
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.btn-upgrade:hover {
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.4);
+}
+
+.alerts-section {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.alerts-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--gray-700);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+.alerts-email-input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border-dark);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.alerts-email-input:focus {
+  outline: none;
+  border-color: var(--fifa-purple);
+}
+
+.alerts-email-input:disabled {
+  background: var(--gray-100);
+  color: var(--gray-600);
+}
+
+.alerts-helper {
+  font-size: 10px;
+  color: var(--gray-500);
+  margin-top: 4px;
+}
+
+.alerts-counter {
+  font-size: 11px;
+  color: var(--gray-600);
+  margin-bottom: 8px;
+}
+
+.alerts-counter strong {
+  color: var(--fifa-purple);
+}
+
+.alerts-why {
+  font-size: 10px;
+  color: var(--gray-500);
+  font-style: italic;
+  margin-top: 6px;
+  line-height: 1.4;
+}
+
+.game-list {
+  max-height: 280px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.game-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.game-item:last-child {
+  border-bottom: none;
+}
+
+.game-item:hover:not(.disabled) {
+  background: var(--gray-50);
+}
+
+.game-item.selected {
+  background: var(--fifa-purple-dim);
+}
+
+.game-item.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.game-item.locked {
+  cursor: default;
+  background: var(--gray-50);
+}
+
+.game-item input[type="checkbox"] {
+  cursor: pointer;
+  accent-color: var(--fifa-purple);
+}
+
+.game-item.locked input[type="checkbox"],
+.game-item.disabled input[type="checkbox"] {
+  pointer-events: none;
+}
+
+.game-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.game-teams {
+  font-weight: 600;
+  color: var(--gray-900);
+}
+
+.game-meta {
+  font-size: 10px;
+  color: var(--gray-500);
+}
+
+.lock-badge {
+  font-size: 10px;
+}
+
+.alert-prefs {
+  padding: 10px;
+  background: var(--gray-50);
+  border-radius: var(--radius-sm);
+  margin-top: 8px;
+}
+
+.alert-pref-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 11px;
+}
+
+.alert-pref-row:last-child {
+  margin-bottom: 0;
+}
+
+.alert-pref-row label {
+  flex: 0 0 auto;
+  color: var(--gray-700);
+}
+
+.alert-pref-row input,
+.alert-pref-row select {
+  flex: 1;
+  padding: 5px 8px;
+  border: 1px solid var(--border-dark);
+  border-radius: 4px;
+  font-size: 11px;
+  font-family: inherit;
+}
+
+.btn-save-alerts {
+  display: block;
+  width: calc(100% - 32px);
+  margin: 14px 16px;
+  padding: 11px;
+  background: var(--fifa-purple);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.btn-save-alerts:hover {
+  background: var(--fifa-purple-light);
+}
+
+.btn-save-alerts:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.alerts-msg {
+  padding: 8px 16px;
+  font-size: 11px;
+  text-align: center;
+}
+
+.alerts-msg.success {
+  color: var(--green);
+  background: var(--green-dim);
+}
+
+.alerts-msg.error {
+  color: var(--danger);
+  background: var(--danger-dim);
+}
+
+/* ---- Alerts: Picks Section ---- */
+
+.alerts-email-locked .email-display {
+  font-family: monospace;
+  font-size: 12px;
+  color: var(--gray-700);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.lock-inline {
+  font-size: 11px;
+  opacity: 0.6;
+}
+
+.picks-section {
+  background: var(--fifa-purple-dim);
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.picks-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.picks-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--gray-900);
+}
+
+.picks-counter {
+  font-size: 11px;
+  color: var(--gray-600);
+}
+
+.pick-slot {
+  background: var(--white);
+  border: 1px solid var(--border-dark);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  transition: border-color 0.15s;
+}
+
+.pick-slot:last-child {
+  margin-bottom: 0;
+}
+
+.pick-slot.expanded {
+  border-color: var(--fifa-purple);
+}
+
+.pick-slot-empty {
+  border-style: dashed;
+  color: var(--gray-500);
+  text-align: center;
+  font-size: 12px;
+  padding: 14px;
+  cursor: default;
+}
+
+.pick-slot-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.pick-slot-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.pick-slot-teams {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--gray-900);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pick-slot-meta {
+  font-size: 10px;
+  color: var(--gray-500);
+  margin-top: 2px;
+}
+
+.pick-summary {
+  font-size: 11px;
+  color: var(--fifa-purple);
+  font-weight: 600;
+  margin-top: 4px;
+}
+
+.pick-edit-btn {
+  flex: 0 0 auto;
+  background: var(--white);
+  border: 1px solid var(--border-dark);
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  font-size: 10px;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--gray-700);
+  cursor: pointer;
+}
+
+.pick-edit-btn:hover {
+  border-color: var(--fifa-purple);
+  color: var(--fifa-purple);
+}
+
+/* ---- Alerts: Threshold Drawer ---- */
+
+.threshold-drawer {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border);
+}
+
+.face-value-chips {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.fv-chip {
+  font-size: 10px;
+  background: var(--gray-100);
+  color: var(--gray-700);
+  padding: 4px 8px;
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+.fv-chip .fv-label {
+  color: var(--gray-500);
+  font-weight: 500;
+  margin-right: 3px;
+}
+
+.drawer-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--gray-600);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 10px;
+  margin-bottom: 6px;
+}
+
+.threshold-mode-pills {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.mode-pill {
+  flex: 1;
+  padding: 6px 8px;
+  background: var(--white);
+  border: 1px solid var(--border-dark);
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--gray-600);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+
+.mode-pill:hover {
+  background: var(--gray-100);
+}
+
+.mode-pill.active {
+  background: var(--fifa-purple);
+  border-color: var(--fifa-purple);
+  color: #fff;
+}
+
+.threshold-slider-wrap {
+  padding: 14px 4px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--gray-50, #f8f9fb);
+  border: 1px solid var(--border);
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.threshold-slider-wrap.is-deal {
+  background: #ecfdf5;
+  border-color: #10b981;
+}
+
+.slider-value-display {
+  text-align: center;
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--gray-900);
+  margin-bottom: 6px;
+  letter-spacing: 0.2px;
+}
+
+.is-deal .slider-value-display {
+  color: #047857;
+}
+
+.threshold-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  --fill: 0%;
+  background: linear-gradient(to right,
+    #10b981 0%,
+    #10b981 var(--fill),
+    var(--gray-200, #e5e7eb) var(--fill),
+    var(--gray-200, #e5e7eb) 100%);
+  border-radius: 3px;
+  outline: none;
+  margin: 8px 0 4px;
+  padding: 0;
+}
+
+.threshold-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--fifa-purple);
+  border: 2px solid #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+}
+
+.threshold-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--fifa-purple);
+  border: 2px solid #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+}
+
+.slider-labels {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--gray-500);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  padding: 0 2px;
+  margin-top: 2px;
+}
+
+.slider-labels .slider-mid-label {
+  color: var(--gray-700);
+  font-weight: 700;
+}
+
+.slider-example {
+  margin-top: 10px;
+  padding: 8px 10px;
+  background: var(--white);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--gray-700);
+  border: 1px solid var(--border);
+}
+
+.is-deal .slider-example {
+  border-color: #a7f3d0;
+  color: #065f46;
+}
+
+.segmented-control {
+  display: flex;
+  border: 1px solid var(--border-dark);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.seg-btn {
+  flex: 1;
+  padding: 6px 8px;
+  background: var(--white);
+  border: none;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--gray-600);
+  cursor: pointer;
+}
+
+.seg-btn:first-child {
+  border-right: 1px solid var(--border-dark);
+}
+
+.seg-btn.active {
+  background: var(--fifa-purple);
+  color: #fff;
+}
+
+.drawer-custom-input {
+  width: 100%;
+  margin-top: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--border-dark);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.drawer-custom-input:focus {
+  outline: none;
+  border-color: var(--fifa-purple);
+}
+
+.drawer-cat-pills {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--border-dark);
+  border-radius: var(--radius-sm);
+  padding: 0;
+  overflow: hidden;
+}
+
+.step-btn {
+  background: var(--white);
+  border: none;
+  width: 28px;
+  height: 28px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--gray-700);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.step-btn:hover {
+  background: var(--gray-100);
+}
+
+.step-value {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--gray-900);
+  min-width: 14px;
+  text-align: center;
+}
+
+.drawer-actions {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+}
+
+.drawer-remove {
+  background: none;
+  border: none;
+  color: var(--danger);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  padding: 0;
+}
+
+.drawer-remove:hover {
+  text-decoration: underline;
+}
+
+/* ---- Alerts: Browse ---- */
+
+.alerts-browse {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.alerts-search {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border-dark);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-family: inherit;
+  box-sizing: border-box;
+  margin-bottom: 8px;
+}
+
+.alerts-search:focus {
+  outline: none;
+  border-color: var(--fifa-purple);
+}
+
+.filter-pills {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+.filter-pill {
+  background: var(--white);
+  border: 1px solid var(--border-dark);
+  border-radius: 12px;
+  padding: 4px 10px;
+  font-size: 10px;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--gray-600);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.filter-pill:hover:not(.active) {
+  border-color: var(--fifa-purple);
+  color: var(--fifa-purple);
+}
+
+.filter-pill.active {
+  background: var(--fifa-purple);
+  border-color: var(--fifa-purple);
+  color: #fff;
+}
+
+.match-list-header {
+  padding: 10px 16px 6px;
+  font-size: 10px;
+  color: var(--gray-500);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+}
+
+.match-list {
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 0 12px 12px;
+}
+
+.match-list-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin-bottom: 6px;
+  background: var(--white);
+  transition: border-color 0.15s;
+}
+
+.match-list-row:hover {
+  border-color: var(--fifa-purple);
+}
+
+.match-list-row.selected {
+  background: var(--fifa-purple-dim);
+  border-color: var(--fifa-purple);
+}
+
+.match-row-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.match-row-teams {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--gray-900);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.match-row-meta {
+  font-size: 10px;
+  color: var(--gray-500);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.match-row-add {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid var(--border-dark);
+  background: var(--white);
+  color: var(--fifa-purple);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.match-row-add.can-add:hover {
+  background: var(--fifa-purple);
+  color: #fff;
+  border-color: var(--fifa-purple);
+}
+
+.match-row-add.added {
+  background: var(--green);
+  color: #fff;
+  border-color: var(--green);
+  cursor: default;
+}
+
+.match-row-add.disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
 /* ---- Header ---- */
 
 .header {

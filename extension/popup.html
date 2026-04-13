@@ -34,6 +34,15 @@
     <a href="https://chromewebstore.google.com/detail/fifa-ticket-scout/YOUR_EXTENSION_ID" target="_blank">Update now</a>
   </div>
 
+  <!-- Tab Bar -->
+  <div class="tab-bar">
+    <button class="tab-btn active" data-tab="scanner">Scanner</button>
+    <button class="tab-btn" data-tab="insights">Insights</button>
+    <button class="tab-btn" data-tab="alerts">Alerts</button>
+  </div>
+
+  <!-- ============ SCANNER TAB ============ -->
+  <div class="tab-panel" id="tab-scanner">
   <!-- Empty state -->
   <div id="noData" class="empty-state">
     <div class="empty-icon">
@@ -127,6 +136,38 @@
       </div>
       <div class="collapsible-body" id="licenseBody" style="display:none;"></div>
     </div>
+  </div>
+  </div><!-- /tab-scanner -->
+
+  <!-- ============ INSIGHTS TAB ============ -->
+  <div class="tab-panel" id="tab-insights" style="display:none;">
+    <div class="insights-header">
+      <h2>Market Insights</h2>
+      <p class="insights-subtitle">Under construction &mdash; coming soon.</p>
+    </div>
+    <div class="insights-cards">
+      <div class="insight-card">
+        <div class="card-icon">&#127959;&#65039;</div>
+        <div class="card-title-row">
+          <span class="card-title">Web dashboard with price trends</span>
+          <span class="card-badge">Coming Soon</span>
+        </div>
+        <p class="card-desc">Visit fifaticketscout.com for full price history charts, trend analysis, and market comparisons across all matches.</p>
+      </div>
+      <div class="insight-card">
+        <div class="card-icon">&#128081;</div>
+        <div class="card-title-row">
+          <span class="card-title">View crowdsourced market data</span>
+          <span class="card-badge">Coming Soon</span>
+        </div>
+        <p class="card-desc">See real-time seat availability and pricing across every FIFA World Cup 2026 match, powered by data from every Ticket Scout user.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ ALERTS TAB ============ -->
+  <div class="tab-panel" id="tab-alerts" style="display:none;">
+    <div id="alertsContent"></div>
   </div>
 
   <!-- Footer -->

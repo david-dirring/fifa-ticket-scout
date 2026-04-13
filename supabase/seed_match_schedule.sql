@@ -118,3 +118,8 @@ INSERT INTO match_schedule (match_number, match_date, day_of_week, stage, city, 
 (102, '2026-07-15', 'Wednesday', 'SF', 'Atlanta', 'W99 v W100', NULL, NULL, '10229226725358'),
 (103, '2026-07-18', 'Saturday', 'Bronze', 'Miami', 'L101 v L102', NULL, NULL, '10229226725361'),
 (104, '2026-07-19', 'Sunday', 'Final', 'NY / NJ', 'W101 v W102', NULL, NULL, '10229226725360');
+
+-- RLS: public read (extension fetches this via anon key)
+ALTER TABLE match_schedule ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public read" ON match_schedule;
+CREATE POLICY "Public read" ON match_schedule FOR SELECT USING (true);

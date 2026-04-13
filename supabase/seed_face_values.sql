@@ -113,3 +113,8 @@ INSERT INTO face_values (match_number, category, face_value) VALUES
 (102, 1, 3040), (102, 2, 2525), (102, 3, 905),
 (103, 1, 1125), (103, 2, 865), (103, 3, 455),
 (104, 1, 8680), (104, 2, 5575), (104, 3, 4185);
+
+-- RLS: public read (extension fetches this via anon key)
+ALTER TABLE face_values ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public read" ON face_values;
+CREATE POLICY "Public read" ON face_values FOR SELECT USING (true);

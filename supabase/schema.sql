@@ -61,6 +61,49 @@ CREATE TABLE match_summary (
   updated_at      timestamptz DEFAULT now()
 );
 
+-- Alert configurations for Pro + Web + Alerts users
+CREATE TABLE alert_configs (
+  id              uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  license_hash    text NOT NULL UNIQUE,
+  email           text NOT NULL,
+  games           jsonb NOT NULL,
+  games_locked    boolean DEFAULT true,
+  created_at      timestamptz DEFAULT now(),
+  updated_at      timestamptz DEFAULT now()
+);
+
+CREATE INDEX idx_alert_configs_license ON alert_configs (license_hash);
+
+-- Append-only history of every alert config save (insert or update).
+-- One row per save — lets you see how users change thresholds over time.
+CREATE TABLE alert_configs_history (
+  id              uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  license_hash    text NOT NULL,
+  email           text NOT NULL,
+  games           jsonb NOT NULL,
+  action          text NOT NULL,   -- 'insert' (first save) or 'update' (revision)
+  saved_at        timestamptz DEFAULT now()
+);
+
+CREATE INDEX idx_alert_history_license_time ON alert_configs_history (license_hash, saved_at DESC);
+CREATE INDEX idx_alert_history_time ON alert_configs_history (saved_at DESC);
+
+-- Alert fires — one row every time the dispatcher sends an email for a pick.
+-- Used for dedup (cooldown window + re-drop detection) and audit.
+CREATE TABLE alerts_sent (
+  id              uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  license_hash    text NOT NULL,
+  email           text NOT NULL,
+  match_number    int NOT NULL,
+  performance_id  text NOT NULL,
+  threshold       int NOT NULL,         -- the dollar cutoff the user set
+  fired_price     int NOT NULL,         -- actual min price at fire time
+  category        text,                 -- "any" | "CAT 1" | "CAT 2" | "CAT 3"
+  fired_at        timestamptz DEFAULT now()
+);
+
+CREATE INDEX idx_alerts_sent_dedup ON alerts_sent (license_hash, match_number, fired_at DESC);
+
 -- Hourly snapshots for trend charts (append-only, one row per match per hour)
 CREATE TABLE match_summary_history (
   id              uuid DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -92,6 +135,18 @@ CREATE POLICY "Public read" ON match_summary FOR SELECT USING (true);
 CREATE POLICY "No direct inserts" ON match_summary FOR INSERT WITH CHECK (false);
 CREATE POLICY "No direct updates" ON match_summary FOR UPDATE USING (false);
 CREATE POLICY "No direct deletes" ON match_summary FOR DELETE USING (false);
+
+-- alert_configs: only Edge Function (service_role) can read/write
+ALTER TABLE alert_configs ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "No direct access" ON alert_configs FOR ALL USING (false);
+
+-- alert_configs_history: only Edge Function (service_role) can read/write
+ALTER TABLE alert_configs_history ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "No direct access" ON alert_configs_history FOR ALL USING (false);
+
+-- alerts_sent: only the dispatcher (service_role) can read/write
+ALTER TABLE alerts_sent ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "No direct access" ON alerts_sent FOR ALL USING (false);
 
 -- match_summary_history: anyone can read, only Edge Function can write
 ALTER TABLE match_summary_history ENABLE ROW LEVEL SECURITY;

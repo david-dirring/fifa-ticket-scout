@@ -5,36 +5,101 @@ const supabase = createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 );
 
+// Validation regexes
+const VISITOR_ID_RE = /^[a-f0-9]{32}$/i;
+const PERFORMANCE_ID_RE = /^\d{5,20}$/;
+const RATE_LIMIT_PER_MINUTE = 10;
+const MIN_SEAT_COUNT = 10;
+const MAX_SEAT_COUNT = 15000;
+const MIN_PRICE_MILLICENTS = 1000;        // ~$1
+const MAX_PRICE_MILLICENTS = 100000000;   // ~$100k
+const MAX_FIELD_LENGTH = 100;
+
+function jsonResponse(body: any, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
 Deno.serve(async (req) => {
   if (req.method !== "POST") {
-    return new Response("Method not allowed", { status: 405 });
+    return jsonResponse({ ok: false, error: "Method not allowed" }, 405);
   }
 
   try {
     const body = await req.json();
     const { visitorId, licenseHash, performanceId, match, seats } = body;
 
-    // Validate
-    if (!performanceId || !seats || typeof seats !== "object") {
-      return new Response(JSON.stringify({ ok: false, error: "Invalid payload" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
+    // --- Visitor ID validation ---
+    if (!visitorId || typeof visitorId !== "string" || !VISITOR_ID_RE.test(visitorId)) {
+      return jsonResponse({ ok: false, error: "Invalid visitorId format" }, 400);
     }
 
-    if (!visitorId) {
-      return new Response(JSON.stringify({ ok: false, error: "Missing visitorId" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
+    // --- Performance ID validation ---
+    if (!performanceId || typeof performanceId !== "string" || !PERFORMANCE_ID_RE.test(performanceId)) {
+      return jsonResponse({ ok: false, error: "Invalid performanceId format" }, 400);
+    }
+
+    // --- Seats structure validation ---
+    if (!seats || typeof seats !== "object" || Array.isArray(seats)) {
+      return jsonResponse({ ok: false, error: "Invalid seats payload" }, 400);
     }
 
     const seatEntries = Object.entries(seats);
-    if (seatEntries.length === 0 || seatEntries.length > 15000) {
-      return new Response(JSON.stringify({ ok: false, error: "Invalid seat count" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
+    if (seatEntries.length < MIN_SEAT_COUNT || seatEntries.length > MAX_SEAT_COUNT) {
+      return jsonResponse(
+        { ok: false, error: `Seat count must be between ${MIN_SEAT_COUNT} and ${MAX_SEAT_COUNT}` },
+        400
+      );
+    }
+
+    // --- Match name validation (must look like FIFA data) ---
+    const matchName = match?.name || "";
+    if (!matchName.includes("Match ") && !matchName.includes("FIFA")) {
+      return jsonResponse({ ok: false, error: "Invalid match name" }, 400);
+    }
+
+    // --- Per-seat validation ---
+    const priceCounts: Record<string, number> = {};
+    for (const [seatId, s] of seatEntries) {
+      const seat = s as any;
+      if (typeof seatId !== "string" || seatId.length > MAX_FIELD_LENGTH) {
+        return jsonResponse({ ok: false, error: "Invalid seat ID" }, 400);
+      }
+      if (typeof seat.price !== "number" || seat.price < MIN_PRICE_MILLICENTS || seat.price > MAX_PRICE_MILLICENTS) {
+        return jsonResponse({ ok: false, error: "Seat price out of range" }, 400);
+      }
+      // Field length checks
+      for (const field of ["block", "area", "row", "seat", "category"]) {
+        const val = seat[field];
+        if (val != null && (typeof val !== "string" || val.length > MAX_FIELD_LENGTH)) {
+          return jsonResponse({ ok: false, error: `Invalid seat.${field}` }, 400);
+        }
+      }
+      // Track price frequency
+      priceCounts[seat.price] = (priceCounts[seat.price] || 0) + 1;
+    }
+
+    // Reject if >50% of seats have the same price (synthetic data)
+    const maxSamePrice = Math.max(...Object.values(priceCounts));
+    if (maxSamePrice / seatEntries.length > 0.5) {
+      return jsonResponse({ ok: false, error: "Suspicious price distribution" }, 400);
+    }
+
+    // --- Rate limiting per visitor_id ---
+    const oneMinuteAgo = new Date(Date.now() - 60 * 1000).toISOString();
+    const { count: recentCount } = await supabase
+      .from("scan_snapshots")
+      .select("id", { count: "exact", head: true })
+      .eq("visitor_id", visitorId)
+      .gte("scanned_at", oneMinuteAgo);
+
+    if ((recentCount || 0) >= RATE_LIMIT_PER_MINUTE) {
+      return jsonResponse(
+        { ok: false, error: "Rate limit exceeded" },
+        429
+      );
     }
 
     // 1. Insert scan snapshot with JSONB seat data
@@ -199,13 +264,9 @@ Deno.serve(async (req) => {
       }
     }
 
-    return new Response(JSON.stringify({ ok: true }), {
-      headers: { "Content-Type": "application/json" },
-    });
+    return jsonResponse({ ok: true });
   } catch (err) {
     console.error("ingest-scan error:", err);
-    return new Response(JSON.stringify({ ok: true }), {
-      headers: { "Content-Type": "application/json" },
-    });
+    return jsonResponse({ ok: true });
   }
 });

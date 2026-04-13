@@ -4,6 +4,66 @@ All notable changes to FIFA Ticket Scout are documented here. Timestamps are in 
 
 ---
 
+## April 12, 2026
+
+### Alerts Tab — Pro + Web + Alerts Tier — 10:00 PM ET
+Added a third tab to the popup ("Alerts") for Pro + Web + Alerts ($49.99) users. Pick up to 3 World Cup matches, set a price threshold per match (3 modes: % of face value, $ offset from face, or absolute $), choose a category filter (Any / CAT 1 / CAT 2 / CAT 3) and number of seats needed. Picks are saved to Supabase via a new `save-alerts` Edge Function that verifies the Gumroad license server-side and locks the user's email + chosen matches. Threshold drawer features a custom range slider with a green "deal zone" (gradient fill that follows the thumb) and a live example that updates in real time as the user drags. Free / lower-tier users see an upgrade prompt instead of the picker. Match list is searchable + filterable by stage and country. Locked picks show as read-only after first save; only thresholds can be adjusted.
+
+**Files changed:** `popup.js`, `popup.css`, `popup.html`, `background.js`
+**Files added:** `supabase/functions/save-alerts/index.ts`
+
+### Threshold Slider — 3-Mode Price Targeting — 9:00 PM ET
+Replaced the original "Below face / Custom $" segmented control in the Alerts threshold drawer with a slider supporting three modes:
+- **% vs Face** (default): -50% to +300%, snaps to 5% steps
+- **$ vs Face**: -$500 to +$3000, snaps to $100 steps
+- **Absolute $**: $0 to $5000, snaps to $50 steps
+
+Slider track has a green fill that tracks the thumb, current value displayed above as a label (`+10%` / `Face` / `+$250` / `$550`), and a live example sentence using a fixed $500 reference face value for easy mental math (e.g. "If face value is $500, at +20%, you'll be alerted when the price drops at or below $600."). The Absolute mode is honest: "Ignore face value, you'll be alerted when the price drops at or below $X." Pick summary line shows the user's intent compactly: `≤+10% vFace · Any · 2tix` instead of just dollars. Threshold dollar value resolved at save time using the actual face value from the `face_values` table.
+
+**Files changed:** `popup.js`, `popup.css`
+
+### `alerts_sent` Audit Table + Dispatcher Dedup Hooks — 8:30 PM ET
+Added an `alerts_sent` table to track every email the (forthcoming) dispatcher fires. Each row captures `license_hash`, `email`, `match_number`, `performance_id`, `threshold`, `fired_price`, `category`, and `fired_at`. Indexed on `(license_hash, match_number, fired_at DESC)` for fast dedup lookups. RLS locks it down to service-role only. Used by the dispatcher to enforce: 24-hour cooldown per `(license, match)` pair, with a re-fire allowed if the new price is at least 10% lower than the last fired price (meaningful re-drop only).
+
+**Files changed:** `supabase/schema.sql`
+
+### `alert_configs_history` Audit Log — 8:00 PM ET
+Added an `alert_configs_history` table that captures every save against `alert_configs` (insert or update) as an immutable row. Lets us see how a user's picks evolve over time without rewriting the live `alert_configs` row. The `save-alerts` Edge Function appends to history on every successful save (best-effort — failure here doesn't fail the user's save). Indexed on `(license_hash, saved_at DESC)` and `(saved_at DESC)`. RLS service-role only.
+
+**Files changed:** `supabase/schema.sql`, `supabase/functions/save-alerts/index.ts`
+
+### Seat Preselect Bridge Scaffolding (Inactive — Future Feature) — 7:30 PM ET
+Added the client-side scaffolding for an "email link → preselected seats" feature: when the dispatcher's alert email link includes `?fts_seats=A,B`, the extension's `content.js` content script parses the param, looks up rich seat metadata from `chrome.storage.local`, and writes to the FIFA seat picker's sessionStorage so the picker boots with those seats already highlighted. `background.js` now captures additional FIFA seat fields (`blockId`, `areaId`, `tariffId`, `advantageId`, `movementId`) per scan to support this. **Currently inactive** — the storage shape needs to be reverse-engineered against the live FIFA SPA (the legacy Secutix shape this was built against has been replaced by a newer frontend); the bridge writes to a key the SPA doesn't read, which is a silent no-op. No user-facing impact until the bridge is rewritten and the dispatcher starts emitting `?fts_seats=` URLs.
+
+**Files changed:** `background.js`, `content.js`
+
+### Supabase Composite Indexes + Match Schedule Performance IDs — 6:00 PM ET
+Added composite indexes to `scan_snapshots` for the most common query patterns: `(performance_id, scanned_at DESC)` and `(visitor_id, scanned_at DESC)`. Backfilled `performance_id` into the `match_schedule` table so dispatcher and webapp can resolve match → performance_id without a join through `match_summary`.
+
+**Files changed:** `supabase/schema.sql`, `supabase/seed_match_schedule.sql`
+
+### Seats Table Reflects Current Availability — 5:00 PM ET
+Changed `ingest-scan` from upsert-by-seat-id to delete-then-insert per match. Old behavior left stale rows in `seats` for seats that had since been bought — every scan would silently grow the table. Now each scan deletes all rows for that `performance_id` first and inserts the fresh set, so `seats` always reflects the current availability snapshot from the most recent scanner. `first_seen_at` is set to the same timestamp as `last_seen_at` since we no longer track historical first-sightings (use `scan_snapshots` for that).
+
+**Files changed:** `supabase/functions/ingest-scan/index.ts`
+
+### Match Schedule Seed (Full Country Names) — 4:00 PM ET
+Added `supabase/seed_match_schedule.sql` containing all 104 World Cup 2026 matches with date, stage, city, home/away teams (full English country names like "United States" not "USA"), and `matchup` fallback for TBD knockout fixtures. Public read RLS for the extension's anon key.
+
+**Files added:** `supabase/seed_match_schedule.sql`
+
+### Face Values Seed — 3:00 PM ET
+Added `supabase/seed_face_values.sql` with FIFA's official face value per category (CAT 1/2/3) for all 104 World Cup 2026 matches, taken from the December 11, 2025 randomized drawing. Public read RLS so the extension and dispatcher can resolve `(match_number, category) → face_value` without needing a service-role key.
+
+**Files added:** `supabase/seed_face_values.sql`
+
+### Version Update Checker + Footer Link — 2:00 PM ET
+Extension now checks GitHub for the latest version (via raw `manifest.json`) on popup open, debounced to once every 6 hours via `chrome.alarms`. Shows a banner at the top of the popup if a newer version is available, with a one-click link to the Chrome Web Store listing. Added a `fifaticketscout.com` link to the popup footer alongside Buy Me a Coffee and the Etsy shop. Bumped extension version to **2.1.0**.
+
+**Files changed:** `popup.js`, `popup.html`, `popup.css`, `background.js`, `manifest.json`
+
+---
+
 ## April 11, 2026
 
 ### Supabase Data Sync — 5:30 PM ET

@@ -91,6 +91,55 @@ function syncToSupabase(performanceId, durationMs) {
   });
 }
 
+async function saveAlerts(payload) {
+  try {
+    const data = await getStorage();
+    const license = data.license;
+    if (!license?.key) {
+      return { ok: false, error: "No license found." };
+    }
+    if ((license.level || 0) < TIERS.PRO_WEB_ALERTS) {
+      return { ok: false, error: "Alerts requires Pro + Web + Alerts tier." };
+    }
+
+    const body = {
+      licenseKey: license.key,  // raw key, Edge Function will verify + hash
+      email: payload.email,
+      games: payload.games,
+    };
+
+    const resp = await fetch(`${SUPABASE_URL}/functions/v1/save-alerts`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+        "apikey": SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify(body),
+    });
+
+    const result = await resp.json();
+    if (!resp.ok || !result.ok) {
+      return { ok: false, error: result.error || "Save failed." };
+    }
+
+    // Persist locally
+    await chrome.storage.local.set({
+      alertConfigs: {
+        email: payload.email,
+        games: payload.games,
+        gamesLocked: result.gamesLocked !== false,
+        savedAt: Date.now(),
+      },
+    });
+
+    return { ok: true, gamesLocked: result.gamesLocked !== false };
+  } catch (err) {
+    console.log("[FIFA Ticket Scout] saveAlerts error:", err.message);
+    return { ok: false, error: "Could not reach server. Check your connection." };
+  }
+}
+
 // ============================================================
 // END SUPABASE SYNC
 // ============================================================
@@ -223,6 +272,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     chrome.storage.local.get("license", (data) => {
       sendResponse({ license: data.license || null });
     });
+    return true;
+  }
+  if (message.type === "SAVE_ALERTS") {
+    saveAlerts(message.payload).then(sendResponse);
     return true;
   }
   if (message.type === "START_SCAN") {
@@ -393,6 +446,14 @@ async function saveSeats(perfId, features, tabId) {
       price: p.amount,
       color: p.color || "",
       exclusive: p.exclusive || false,
+      // Extra IDs needed by the seat-preselect bridge (content.js) so the
+      // FIFA seat picker can re-render a "selected" state from sessionStorage.
+      // All optional — undefined values are dropped from the JSON automatically.
+      blockId: p.block?.id,
+      areaId: p.area?.id,
+      tariffId: p.tariffId ?? p.tariff?.id,
+      advantageId: p.advantageId ?? p.advantage?.id,
+      movementId: p.movementId ?? p.resaleMovementId,
     };
   }
 

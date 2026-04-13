@@ -7,3 +7,4 @@ seat_data/
 *.log
 supabase/queries/
 supabase/.temp/
+notes/

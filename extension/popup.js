@@ -12,6 +12,20 @@ document.addEventListener("DOMContentLoaded", () => {
   // Check for updates
   checkForUpdate();
 
+  // Tab switching
+  document.querySelectorAll(".tab-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const target = btn.dataset.tab;
+      document.querySelectorAll(".tab-btn").forEach((b) => {
+        b.classList.toggle("active", b === btn);
+      });
+      document.querySelectorAll(".tab-panel").forEach((p) => {
+        p.style.display = p.id === `tab-${target}` ? "" : "none";
+      });
+      if (target === "alerts") renderAlertsTab();
+    });
+  });
+
   // Listen for live updates from background
   chrome.runtime.onMessage.addListener((message) => {
     if (message.type === "DATA_UPDATED") {
@@ -915,7 +929,7 @@ function renderLicenseSection(license) {
           <button class="btn-activate" id="activateBtn">Activate</button>
         </div>
         <div class="license-error" id="licenseError" style="display:none;"></div>
-        <a href="https://daviddirring.gumroad.com/" target="_blank" class="upgrade-link">
+        <a href="https://fifaticketscout.com/#pricing" target="_blank" class="upgrade-link">
           Get a license &rarr;
         </a>
       </div>
@@ -963,6 +977,769 @@ function handleActivate() {
       btn.disabled = false;
       btn.textContent = "Activate";
     }
+  });
+}
+
+// --- Alerts Tab ---
+
+const SUPABASE_URL = "https://yaydpahqlqwesqdddgfi.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlheWRwYWhxbHF3ZXNxZGRkZ2ZpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU5MDg1NDEsImV4cCI6MjA5MTQ4NDU0MX0.QQJuKz9Fnb_schlS6FEioMtyRvrJVBwAL71dzitZU-g";
+
+let alertsTabLoaded = false;
+let matchList = [];
+let faceValueMap = {}; // match_number -> { cat1, cat2, cat3 }
+let selectedAlertGames = new Map(); // match_number -> prefs
+let alertFilters = { search: "", stages: new Set(["All"]), countries: new Set() };
+let expandedDrawer = null; // match_number of currently open drawer
+
+// City → host country
+const CITY_COUNTRY = {
+  "Los Angeles": "USA", "NY / NJ": "USA", "Dallas": "USA", "Miami": "USA",
+  "Atlanta": "USA", "Boston": "USA", "Houston": "USA", "Kansas City": "USA",
+  "Philadelphia": "USA", "San Francisco": "USA", "Seattle": "USA",
+  "Toronto": "CAN", "Vancouver": "CAN",
+  "Mexico City": "MEX", "Guadalajara": "MEX", "Monterrey": "MEX",
+};
+
+function renderAlertsTab() {
+  const container = document.getElementById("alertsContent");
+
+  // Check tier
+  if (userLevel < TIERS.PRO_WEB_ALERTS) {
+    container.innerHTML = renderAlertsLocked();
+    return;
+  }
+
+  // Already loaded? Just re-render with current state
+  if (alertsTabLoaded) {
+    loadSavedAlertConfig().then((config) => renderAlertsForm(container, config));
+    return;
+  }
+
+  // Loading state
+  container.innerHTML = `
+    <div class="alerts-header">
+      <h2>Alerts</h2>
+      <p class="alerts-subtitle">Pick 3 matches. We'll ping you when prices drop.</p>
+    </div>
+    <div class="alerts-msg">Loading matches&hellip;</div>
+  `;
+
+  // Load match list + face values + saved config in parallel
+  Promise.all([fetchMatchList(), fetchFaceValues(), loadSavedAlertConfig()]).then(([matches, faceValues, config]) => {
+    matchList = matches || [];
+    faceValueMap = buildFaceValueMap(faceValues || []);
+    if (config?.games) {
+      selectedAlertGames = new Map(
+        config.games.map((g) => [g.match_number, migratePickToNewShape(g)])
+      );
+    }
+    alertsTabLoaded = true;
+    renderAlertsForm(container, config);
+  }).catch((err) => {
+    container.innerHTML = `
+      <div class="alerts-header"><h2>Alerts</h2></div>
+      <div class="alerts-msg error">Could not load matches. Try again later.</div>
+    `;
+    console.log("[FIFA Ticket Scout] Alerts load error:", err);
+  });
+}
+
+function fetchFaceValues() {
+  return fetch(`${SUPABASE_URL}/rest/v1/face_values?select=match_number,category,face_value&order=match_number.asc`, {
+    headers: {
+      "apikey": SUPABASE_ANON_KEY,
+      "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+    },
+  }).then((r) => r.json());
+}
+
+function buildFaceValueMap(rows) {
+  const map = {};
+  for (const r of rows) {
+    if (!map[r.match_number]) map[r.match_number] = {};
+    map[r.match_number][`cat${r.category}`] = r.face_value;
+  }
+  return map;
+}
+
+function getFaceValueForCategory(matchNumber, category) {
+  const fv = faceValueMap[matchNumber];
+  if (!fv) return null;
+  if (category === "any" || !category) {
+    // cheapest cat
+    const vals = [fv.cat1, fv.cat2, fv.cat3].filter((v) => v != null);
+    return vals.length > 0 ? Math.min(...vals) : null;
+  }
+  if (category === "CAT 1") return fv.cat1;
+  if (category === "CAT 2") return fv.cat2;
+  if (category === "CAT 3") return fv.cat3;
+  return null;
+}
+
+function renderAlertsLocked() {
+  return `
+    <div class="alerts-header">
+      <h2>Alerts</h2>
+      <p class="alerts-subtitle">Get notified when prices drop on the games that matter to you.</p>
+    </div>
+    <div class="alerts-locked">
+      <div class="alerts-locked-icon">&#x1F512;</div>
+      <div class="alerts-locked-title">Alerts is a Pro + Web + Alerts feature</div>
+      <p class="alerts-locked-msg">
+        Pick up to 3 games and we'll email you when prices drop below your target.
+        Built for fans trying to get into the stadium with their family, not for flippers.
+      </p>
+      <a href="https://fifaticketscout.com/#pricing" target="_blank" class="btn-upgrade">
+        Upgrade &mdash; choose PRO + WEB + ALERTS &rarr;
+      </a>
+    </div>
+  `;
+}
+
+function fetchMatchList() {
+  return fetch(`${SUPABASE_URL}/rest/v1/match_schedule?select=match_number,match_date,stage,city,home_team,away_team,matchup,performance_id&order=match_number.asc`, {
+    headers: {
+      "apikey": SUPABASE_ANON_KEY,
+      "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+    },
+  }).then((r) => r.json());
+}
+
+function loadSavedAlertConfig() {
+  return new Promise((resolve) => {
+    chrome.storage.local.get("alertConfigs", (data) => {
+      resolve(data.alertConfigs || null);
+    });
+  });
+}
+
+function renderAlertsForm(container, savedConfig) {
+  const gamesLocked = savedConfig?.gamesLocked === true;
+  const savedEmail = savedConfig?.email || "";
+  const count = selectedAlertGames.size;
+
+  container.innerHTML = `
+    <div class="alerts-header">
+      <h2>Alerts</h2>
+      <p class="alerts-subtitle">Pick 3 matches. We'll ping you when prices drop.</p>
+    </div>
+
+    ${!savedEmail ? `
+    <div class="alerts-section">
+      <div class="alerts-section-title">Email</div>
+      <input type="email" id="alertsEmail" class="alerts-email-input" placeholder="you@example.com">
+      <div class="alerts-helper">Where should we send your price drop alerts?</div>
+    </div>
+    ` : `
+    <div class="alerts-section alerts-email-locked">
+      <div class="alerts-section-title">Email</div>
+      <div class="email-display">${escapeHtml(maskEmail(savedEmail))}
+        <span class="lock-inline">&#x1F512;</span>
+      </div>
+      <div class="alerts-helper">Locked to your license.</div>
+    </div>
+    `}
+
+    <!-- Your Picks -->
+    <div class="picks-section">
+      <div class="picks-header">
+        <span class="picks-title">Your Picks</span>
+        <span class="picks-counter">${count} of 3${gamesLocked ? ' &middot; Locked' : ''}</span>
+      </div>
+      <div id="pickSlots"></div>
+    </div>
+
+    ${!gamesLocked ? `
+    <!-- Browse -->
+    <div class="alerts-browse">
+      <input type="text" id="alertsSearch" class="alerts-search" placeholder="Search team, city, or stage..." value="${escapeHtml(alertFilters.search)}">
+      <div class="filter-pills" id="stagePills"></div>
+      <div class="filter-pills" id="countryPills"></div>
+    </div>
+    <div class="match-list-header" id="matchListHeader"></div>
+    <div class="match-list" id="matchList"></div>
+    ` : ""}
+
+    <div id="alertsMsg"></div>
+
+    <button class="btn-save-alerts" id="saveAlertsBtn" ${count === 0 && !gamesLocked ? "disabled" : ""}>
+      ${gamesLocked ? "Update Price Thresholds" : `Save my ${count > 0 ? count : ""} pick${count !== 1 ? "s" : ""}`}
+    </button>
+  `;
+
+  renderPickSlots(gamesLocked);
+  if (!gamesLocked) {
+    renderFilterPills();
+    renderMatchList();
+    document.getElementById("alertsSearch").addEventListener("input", (e) => {
+      alertFilters.search = e.target.value;
+      renderMatchList();
+    });
+  }
+  document.getElementById("saveAlertsBtn").addEventListener("click", handleSaveAlerts);
+}
+
+function renderPickSlots(gamesLocked) {
+  const slotsEl = document.getElementById("pickSlots");
+  const slots = [1, 2, 3];
+  const picks = Array.from(selectedAlertGames.values());
+
+  slotsEl.innerHTML = slots.map((n) => {
+    const pick = picks[n - 1];
+    if (!pick) {
+      if (gamesLocked) return "";
+      return `<div class="pick-slot pick-slot-empty">+ Add pick ${n}</div>`;
+    }
+    const match = matchList.find((m) => m.match_number === pick.match_number);
+    if (!match) return "";
+    const teams = (match.home_team && match.away_team)
+      ? `${match.home_team} vs ${match.away_team}`
+      : (match.matchup || "TBD");
+    const dateStr = match.match_date ? new Date(match.match_date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "";
+    const summary = summarizeThreshold(pick);
+    const isExpanded = expandedDrawer === pick.match_number;
+
+    return `
+      <div class="pick-slot ${isExpanded ? 'expanded' : ''}" data-match="${pick.match_number}">
+        <div class="pick-slot-header">
+          <div class="pick-slot-info">
+            <div class="pick-slot-teams">#${pick.match_number} &middot; ${escapeHtml(teams)} ${gamesLocked ? '<span class="lock-inline">&#x1F512;</span>' : ''}</div>
+            <div class="pick-slot-meta">${escapeHtml(match.city || "")} &middot; ${escapeHtml(match.stage || "")} &middot; ${dateStr}</div>
+            <div class="pick-summary">${summary}</div>
+          </div>
+          <button class="pick-edit-btn" data-edit="${pick.match_number}">${isExpanded ? 'Close' : 'Edit'}</button>
+        </div>
+        ${isExpanded ? renderThresholdDrawer(pick, gamesLocked) : ""}
+      </div>
+    `;
+  }).join("");
+
+  // Wire up edit buttons
+  slotsEl.querySelectorAll(".pick-edit-btn").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const matchNum = parseInt(btn.dataset.edit);
+      expandedDrawer = expandedDrawer === matchNum ? null : matchNum;
+      renderPickSlots(gamesLocked);
+    });
+  });
+
+  // Wire up drawer inputs
+  wireThresholdDrawer(gamesLocked);
+}
+
+// Normalize a saved game config into the current pref shape.
+// Handles legacy { mode: "face" | "custom", threshold } entries.
+function migratePickToNewShape(g) {
+  if (g.thresholdMode) {
+    return {
+      ...g,
+      percentOfFace: g.percentOfFace || 0,
+      dollarOffset: g.dollarOffset || 0,
+      absolute: g.absolute || 0,
+    };
+  }
+  const base = {
+    match_number: g.match_number,
+    performance_id: g.performance_id || null,
+    category: g.category || "any",
+    seats: g.seats || 2,
+    thresholdMode: "percent",
+    percentOfFace: 0,
+    dollarOffset: 0,
+    absolute: 0,
+  };
+  if (g.mode === "face") return base;
+  // Legacy "custom" with a fixed dollar threshold → absolute mode
+  if (g.threshold && g.threshold > 0) {
+    return { ...base, thresholdMode: "absolute", absolute: g.threshold };
+  }
+  return base;
+}
+
+// Compute effective dollar threshold from a pick's threshold settings.
+// Returns null if face value required but not available.
+function computeThresholdForPick(pick) {
+  const mode = pick.thresholdMode || "percent";
+  if (mode === "absolute") {
+    return pick.absolute != null ? pick.absolute : null;
+  }
+  const fv = getFaceValueForCategory(pick.match_number, pick.category);
+  if (fv == null) return null;
+  if (mode === "dollarOffset") {
+    const offset = pick.dollarOffset != null ? pick.dollarOffset : 0;
+    return Math.max(0, Math.round(fv + offset));
+  }
+  // percent
+  const pct = pick.percentOfFace != null ? pick.percentOfFace : 0;
+  return Math.max(0, Math.round(fv * (1 + pct / 100)));
+}
+
+function summarizeThreshold(pick) {
+  const seats = pick.seats || 2;
+  const cat = pick.category === "any" ? "Any" : (pick.category || "Any");
+  const mode = pick.thresholdMode || "percent";
+
+  let head;
+  if (mode === "absolute") {
+    const abs = pick.absolute != null ? pick.absolute : 0;
+    head = `&le;$${abs}`;
+  } else if (mode === "dollarOffset") {
+    const off = pick.dollarOffset || 0;
+    if (off === 0) head = `&le;Face`;
+    else if (off > 0) head = `&le;+$${off} vFace`;
+    else head = `&le;-$${Math.abs(off)} vFace`;
+  } else {
+    const pct = pick.percentOfFace != null ? pick.percentOfFace : 0;
+    if (pct === 0) head = `&le;Face`;
+    else if (pct > 0) head = `&le;+${pct}% vFace`;
+    else head = `&le;${pct}% vFace`;
+  }
+  return `${head} &middot; ${cat} &middot; ${seats}tix`;
+}
+
+function formatPercentLabel(pct) {
+  if (pct === 0) return "Face";
+  if (pct > 0) return `+${pct}%`;
+  return `${pct}%`;
+}
+
+function formatDollarOffsetLabel(d) {
+  if (d === 0) return "Face";
+  if (d > 0) return `+$${d}`;
+  return `-$${Math.abs(d)}`;
+}
+
+function formatAbsoluteLabel(d) {
+  return `$${d}`;
+}
+
+function buildSliderExample(pick, _fv) {
+  // Examples use a fixed $500 face value for easy mental math,
+  // regardless of the actual match face value.
+  const mode = pick.thresholdMode || "percent";
+  const EXAMPLE_FV = 500;
+
+  if (mode === "absolute") {
+    const abs = pick.absolute != null ? pick.absolute : 0;
+    return `Ignore face value, you'll be alerted when the price drops at or below $${abs}.`;
+  }
+
+  if (mode === "dollarOffset") {
+    const off = pick.dollarOffset != null ? pick.dollarOffset : 0;
+    const threshold = Math.max(0, EXAMPLE_FV + off);
+    const offStr = off === 0 ? "$0" : off > 0 ? `+$${off}` : `-$${Math.abs(off)}`;
+    return `If face value is $${EXAMPLE_FV}, at ${offStr}, you'll be alerted when the price drops at or below $${threshold}.`;
+  }
+
+  // percent
+  const pct = pick.percentOfFace != null ? pick.percentOfFace : 0;
+  const threshold = Math.max(0, Math.round(EXAMPLE_FV * (1 + pct / 100)));
+  const pctStr = pct === 0 ? "0%" : pct > 0 ? `+${pct}%` : `${pct}%`;
+  return `If face value is $${EXAMPLE_FV}, at ${pctStr}, you'll be alerted when the price drops at or below $${threshold}.`;
+}
+
+function isPickDeal(pick, fv) {
+  const mode = pick.thresholdMode || "percent";
+  if (mode === "percent") return (pick.percentOfFace || 0) <= 0;
+  if (mode === "dollarOffset") return (pick.dollarOffset || 0) <= 0;
+  if (mode === "absolute") return fv != null && (pick.absolute || 0) <= fv;
+  return false;
+}
+
+function sliderConfigForMode(mode) {
+  if (mode === "dollarOffset") {
+    return { min: -500, max: 3000, step: 100, leftLabel: "-$500", midLabel: "Face", rightLabel: "+$3000" };
+  }
+  if (mode === "absolute") {
+    return { min: 0, max: 5000, step: 50, leftLabel: "$0", midLabel: "", rightLabel: "$5000" };
+  }
+  return { min: -50, max: 300, step: 5, leftLabel: "-50%", midLabel: "Face", rightLabel: "+300%" };
+}
+
+function sliderValueForMode(pick) {
+  const mode = pick.thresholdMode || "percent";
+  if (mode === "dollarOffset") return pick.dollarOffset != null ? pick.dollarOffset : 0;
+  if (mode === "absolute") return pick.absolute != null ? pick.absolute : 0;
+  return pick.percentOfFace != null ? pick.percentOfFace : 0;
+}
+
+function sliderFillPct(value, min, max) {
+  if (max === min) return 0;
+  const p = ((value - min) / (max - min)) * 100;
+  return Math.max(0, Math.min(100, p));
+}
+
+function sliderLabelForMode(pick) {
+  const mode = pick.thresholdMode || "percent";
+  if (mode === "dollarOffset") return formatDollarOffsetLabel(pick.dollarOffset || 0);
+  if (mode === "absolute") return formatAbsoluteLabel(pick.absolute || 0);
+  return formatPercentLabel(pick.percentOfFace || 0);
+}
+
+function renderThresholdDrawer(pick, gamesLocked) {
+  const category = pick.category || "any";
+  const seats = pick.seats || 2;
+  const mode = pick.thresholdMode || "percent";
+  const catFv = getFaceValueForCategory(pick.match_number, category);
+  const example = buildSliderExample(pick, catFv);
+  const isDeal = isPickDeal(pick, catFv);
+  const cfg = sliderConfigForMode(mode);
+  const val = sliderValueForMode(pick);
+  const valLabel = sliderLabelForMode(pick);
+  const fillPct = sliderFillPct(val, cfg.min, cfg.max);
+
+  return `
+    <div class="threshold-drawer" data-match="${pick.match_number}">
+      <div class="drawer-label">Alert me when price is at or below</div>
+      <div class="threshold-mode-pills">
+        <button class="mode-pill ${mode === "percent" ? "active" : ""}" data-mode="percent">% vs Face</button>
+        <button class="mode-pill ${mode === "dollarOffset" ? "active" : ""}" data-mode="dollarOffset">$ vs Face</button>
+        <button class="mode-pill ${mode === "absolute" ? "active" : ""}" data-mode="absolute">Absolute $</button>
+      </div>
+      <div class="threshold-slider-wrap ${isDeal ? 'is-deal' : ''}">
+        <div class="slider-value-display" id="sliderVal-${pick.match_number}">${valLabel}</div>
+        <input type="range" class="threshold-slider" data-field="${mode}"
+          min="${cfg.min}" max="${cfg.max}" step="${cfg.step}" value="${val}"
+          style="--fill: ${fillPct}%">
+        <div class="slider-labels">
+          <span>${cfg.leftLabel}</span>
+          <span class="slider-mid-label">${cfg.midLabel}</span>
+          <span>${cfg.rightLabel}</span>
+        </div>
+        <div class="slider-example" id="sliderExample-${pick.match_number}">${escapeHtml(example)}</div>
+      </div>
+
+      <div class="drawer-label">Category</div>
+      <div class="filter-pills drawer-cat-pills">
+        <button class="filter-pill ${category === "any" ? "active" : ""}" data-cat="any">Any</button>
+        <button class="filter-pill ${category === "CAT 1" ? "active" : ""}" data-cat="CAT 1">CAT 1</button>
+        <button class="filter-pill ${category === "CAT 2" ? "active" : ""}" data-cat="CAT 2">CAT 2</button>
+        <button class="filter-pill ${category === "CAT 3" ? "active" : ""}" data-cat="CAT 3">CAT 3</button>
+      </div>
+
+      <div class="drawer-label">Seats needed</div>
+      <div class="stepper">
+        <button class="step-btn" data-step="-1">&minus;</button>
+        <span class="step-value">${seats}</span>
+        <button class="step-btn" data-step="+1">+</button>
+      </div>
+
+      ${!gamesLocked ? `
+      <div class="drawer-actions">
+        <button class="drawer-remove" data-remove="${pick.match_number}">Remove pick</button>
+      </div>
+      ` : ""}
+    </div>
+  `;
+}
+
+function wireThresholdDrawer(gamesLocked) {
+  document.querySelectorAll(".threshold-drawer").forEach((drawer) => {
+    const matchNum = parseInt(drawer.dataset.match);
+    const prefs = selectedAlertGames.get(matchNum);
+    if (!prefs) return;
+
+    // Mode toggle pills
+    drawer.querySelectorAll("[data-mode]").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const nextMode = btn.dataset.mode;
+        if (prefs.thresholdMode === nextMode) return;
+        prefs.thresholdMode = nextMode;
+        // Seed absolute with face value on first switch if unset
+        if (nextMode === "absolute" && (prefs.absolute == null || prefs.absolute === 0)) {
+          const fv = getFaceValueForCategory(matchNum, prefs.category);
+          if (fv != null) prefs.absolute = fv;
+        }
+        selectedAlertGames.set(matchNum, prefs);
+        renderPickSlots(gamesLocked);
+      });
+    });
+
+    // Slider (routes value to correct pref field based on mode)
+    const slider = drawer.querySelector(".threshold-slider");
+    const valEl = drawer.querySelector(`#sliderVal-${matchNum}`);
+    const exampleEl = drawer.querySelector(`#sliderExample-${matchNum}`);
+    const wrap = drawer.querySelector(".threshold-slider-wrap");
+    if (slider) {
+      slider.addEventListener("input", (e) => {
+        e.stopPropagation();
+        const v = parseInt(e.target.value);
+        const mode = prefs.thresholdMode || "percent";
+        if (mode === "dollarOffset") prefs.dollarOffset = v;
+        else if (mode === "absolute") prefs.absolute = v;
+        else prefs.percentOfFace = v;
+        selectedAlertGames.set(matchNum, prefs);
+        if (valEl) valEl.textContent = sliderLabelForMode(prefs);
+        const fv = getFaceValueForCategory(matchNum, prefs.category);
+        if (exampleEl) exampleEl.textContent = buildSliderExample(prefs, fv);
+        if (wrap) wrap.classList.toggle("is-deal", isPickDeal(prefs, fv));
+        const cfg = sliderConfigForMode(mode);
+        slider.style.setProperty("--fill", sliderFillPct(v, cfg.min, cfg.max) + "%");
+      });
+      slider.addEventListener("change", () => renderPickSlots(gamesLocked));
+    }
+
+    // Category pills
+    drawer.querySelectorAll("[data-cat]").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        prefs.category = btn.dataset.cat;
+        selectedAlertGames.set(matchNum, prefs);
+        renderPickSlots(gamesLocked);
+      });
+    });
+
+    // Stepper
+    drawer.querySelectorAll(".step-btn").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const delta = parseInt(btn.dataset.step);
+        const next = Math.max(1, Math.min(6, (prefs.seats || 2) + delta));
+        prefs.seats = next;
+        selectedAlertGames.set(matchNum, prefs);
+        renderPickSlots(gamesLocked);
+      });
+    });
+
+    // Remove
+    drawer.querySelectorAll("[data-remove]").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const mn = parseInt(btn.dataset.remove);
+        selectedAlertGames.delete(mn);
+        expandedDrawer = null;
+        loadSavedAlertConfig().then((config) => {
+          renderAlertsForm(document.getElementById("alertsContent"), config);
+        });
+      });
+    });
+  });
+}
+
+function renderFilterPills() {
+  const stageEl = document.getElementById("stagePills");
+  const countryEl = document.getElementById("countryPills");
+
+  const stages = ["All", "Group", "R32", "R16", "QF", "SF", "Bronze", "Final"];
+  stageEl.innerHTML = stages.map((s) => {
+    const active = alertFilters.stages.has(s) ? "active" : "";
+    return `<button class="filter-pill ${active}" data-stage="${s}">${s}</button>`;
+  }).join("");
+
+  const countries = ["USA", "CAN", "MEX"];
+  countryEl.innerHTML = countries.map((c) => {
+    const active = alertFilters.countries.has(c) ? "active" : "";
+    return `<button class="filter-pill ${active}" data-country="${c}">${c}</button>`;
+  }).join("");
+
+  stageEl.querySelectorAll("[data-stage]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const stage = btn.dataset.stage;
+      if (stage === "All") {
+        alertFilters.stages = new Set(["All"]);
+      } else {
+        alertFilters.stages.delete("All");
+        if (alertFilters.stages.has(stage)) alertFilters.stages.delete(stage);
+        else alertFilters.stages.add(stage);
+        if (alertFilters.stages.size === 0) alertFilters.stages = new Set(["All"]);
+      }
+      renderFilterPills();
+      renderMatchList();
+    });
+  });
+
+  countryEl.querySelectorAll("[data-country]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const country = btn.dataset.country;
+      if (alertFilters.countries.has(country)) alertFilters.countries.delete(country);
+      else alertFilters.countries.add(country);
+      renderFilterPills();
+      renderMatchList();
+    });
+  });
+}
+
+function filterMatches() {
+  const q = alertFilters.search.toLowerCase().trim();
+  return matchList.filter((m) => {
+    // Stage filter
+    if (!alertFilters.stages.has("All")) {
+      const matchesStage = Array.from(alertFilters.stages).some((s) => {
+        if (s === "Group") return (m.stage || "").startsWith("Group ");
+        return m.stage === s;
+      });
+      if (!matchesStage) return false;
+    }
+    // Country filter
+    if (alertFilters.countries.size > 0) {
+      const country = CITY_COUNTRY[m.city];
+      if (!country || !alertFilters.countries.has(country)) return false;
+    }
+    // Search filter
+    if (q) {
+      const hay = [
+        m.home_team, m.away_team, m.matchup, m.city, m.stage,
+      ].filter(Boolean).join(" ").toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+}
+
+function renderMatchList() {
+  const listEl = document.getElementById("matchList");
+  const headerEl = document.getElementById("matchListHeader");
+  if (!listEl || !headerEl) return;
+
+  const filtered = filterMatches();
+  const count = selectedAlertGames.size;
+  const canAdd = count < 3;
+
+  headerEl.innerHTML = `Showing ${filtered.length} of ${matchList.length}`;
+
+  listEl.innerHTML = filtered.map((m) => {
+    const isSelected = selectedAlertGames.has(m.match_number);
+    const teams = (m.home_team && m.away_team)
+      ? `${m.home_team} vs ${m.away_team}`
+      : (m.matchup || "TBD");
+    const dateStr = m.match_date ? new Date(m.match_date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "";
+    const fv = faceValueMap[m.match_number];
+    const cheapestFv = fv ? Math.min(...[fv.cat1, fv.cat2, fv.cat3].filter((v) => v != null)) : null;
+    const fvStr = cheapestFv != null ? `$${cheapestFv}` : "";
+
+    const btnState = isSelected ? "added" : (canAdd ? "can-add" : "disabled");
+    const btnSymbol = isSelected ? "&#10003;" : "+";
+    const btnTitle = isSelected ? "Added" : (canAdd ? "Add to picks" : "Remove a pick first");
+
+    return `
+      <div class="match-list-row ${isSelected ? 'selected' : ''}" data-match="${m.match_number}">
+        <div class="match-row-info">
+          <div class="match-row-teams">#${m.match_number} &middot; ${escapeHtml(teams)}</div>
+          <div class="match-row-meta">${escapeHtml(m.city || "")} &middot; ${escapeHtml(m.stage || "")} &middot; ${dateStr}${fvStr ? ' &middot; ' + fvStr : ''}</div>
+        </div>
+        <button class="match-row-add ${btnState}" data-add="${m.match_number}" title="${btnTitle}">${btnSymbol}</button>
+      </div>
+    `;
+  }).join("");
+
+  listEl.querySelectorAll(".match-row-add").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const matchNum = parseInt(btn.dataset.add);
+      if (selectedAlertGames.has(matchNum)) return;
+      if (selectedAlertGames.size >= 3) return;
+      addGameSelection(matchNum);
+    });
+  });
+}
+
+function addGameSelection(matchNumber) {
+  const match = matchList.find((m) => m.match_number === matchNumber);
+  selectedAlertGames.set(matchNumber, {
+    match_number: matchNumber,
+    performance_id: match?.performance_id || null,
+    category: "any",
+    seats: 2,
+    thresholdMode: "percent",
+    percentOfFace: 0,
+    dollarOffset: 0,
+    absolute: 0,
+  });
+  // Re-render form
+  loadSavedAlertConfig().then((config) => {
+    renderAlertsForm(document.getElementById("alertsContent"), config);
+  });
+}
+
+function maskEmail(email) {
+  const [local, domain] = email.split("@");
+  if (!domain) return email;
+  const masked = local.length > 2
+    ? local[0] + "•".repeat(Math.min(local.length - 2, 5)) + local.slice(-1)
+    : local;
+  return `${masked}@${domain}`;
+}
+
+function validEmail(email) {
+  const re = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+  if (!re.test(email)) return false;
+  if (/[,;\s]/.test(email)) return false;
+  return true;
+}
+
+function handleSaveAlerts() {
+  const msgEl = document.getElementById("alertsMsg");
+  const btn = document.getElementById("saveAlertsBtn");
+  const emailInput = document.getElementById("alertsEmail");
+
+  loadSavedAlertConfig().then((config) => {
+    const gamesLocked = config?.gamesLocked === true;
+    const email = config?.email || (emailInput ? emailInput.value.trim() : "");
+
+    // Validate email (only if not locked)
+    if (!gamesLocked) {
+      if (!validEmail(email)) {
+        msgEl.innerHTML = '<div class="alerts-msg error">Please enter a single valid email address.</div>';
+        return;
+      }
+      if (selectedAlertGames.size === 0) {
+        msgEl.innerHTML = '<div class="alerts-msg error">Pick at least one game.</div>';
+        return;
+      }
+      // Pre-save confirmation
+      const confirmed = confirm(
+        "Lock in these matches?\n\n" +
+        "To keep alerts for true fans, the matches you pick are permanent.\n\n" +
+        "You can still adjust price, category, and seats anytime — just not the matches themselves."
+      );
+      if (!confirmed) return;
+    }
+
+    // Compute effective threshold per game from the threshold mode/value
+    const games = Array.from(selectedAlertGames.values()).map((prefs) => {
+      const threshold = computeThresholdForPick(prefs);
+      return {
+        match_number: prefs.match_number,
+        performance_id: prefs.performance_id,
+        threshold: threshold || 0,
+        category: prefs.category || "any",
+        seats: prefs.seats || 2,
+        thresholdMode: prefs.thresholdMode || "percent",
+        percentOfFace: prefs.percentOfFace || 0,
+        dollarOffset: prefs.dollarOffset || 0,
+        absolute: prefs.absolute || 0,
+      };
+    });
+
+    // Validate each game has a positive threshold
+    for (const g of games) {
+      if (!g.threshold || g.threshold <= 0) {
+        msgEl.innerHTML = `<div class="alerts-msg error">Set a price threshold for match ${g.match_number} (face value may not be available yet).</div>`;
+        return;
+      }
+    }
+
+    btn.disabled = true;
+    btn.textContent = "Saving...";
+    msgEl.innerHTML = "";
+
+    chrome.runtime.sendMessage(
+      { type: "SAVE_ALERTS", payload: { email, games } },
+      (resp) => {
+        if (resp?.ok) {
+          msgEl.innerHTML = '<div class="alerts-msg success">Locked in. We\'re watching these for you.</div>';
+          alertsTabLoaded = false; // force reload on next open
+          setTimeout(() => renderAlertsTab(), 600);
+        } else {
+          msgEl.innerHTML = `<div class="alerts-msg error">${resp?.error || "Save failed. Try again."}</div>`;
+          btn.disabled = false;
+          btn.textContent = gamesLocked ? "Update Price Thresholds" : "Save my picks";
+        }
+      }
+    );
   });
 }
 
