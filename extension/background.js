@@ -91,6 +91,42 @@ function syncToSupabase(performanceId, durationMs) {
   });
 }
 
+async function fetchAlerts() {
+  // Cloud rehydrate path. Returns { ok: true, email, games, gamesLocked, savedAt, updatedAt }
+  // on success, or { ok: false, error } on failure. Does NOT write to
+  // chrome.storage.local — the caller decides whether to cache the result
+  // (so an offline fallback path can't accidentally clobber the canonical copy).
+  try {
+    const data = await getStorage();
+    const license = data.license;
+    if (!license?.key) {
+      return { ok: false, error: "No license found." };
+    }
+    if ((license.level || 0) < TIERS.PRO_WEB_ALERTS) {
+      return { ok: false, error: "Alerts requires Pro + Web + Alerts tier." };
+    }
+
+    const resp = await fetch(`${SUPABASE_URL}/functions/v1/get-alerts`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+        "apikey": SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ licenseKey: license.key }),
+    });
+
+    const result = await resp.json();
+    if (!resp.ok || !result.ok) {
+      return { ok: false, error: result.error || "Fetch failed." };
+    }
+    return result;
+  } catch (err) {
+    console.log("[FIFA Ticket Scout] fetchAlerts error:", err.message);
+    return { ok: false, error: "Could not reach server. Check your connection." };
+  }
+}
+
 async function saveAlerts(payload) {
   try {
     const data = await getStorage();
@@ -271,6 +307,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     chrome.storage.local.get("license", (data) => {
       sendResponse({ license: data.license || null });
     });
+    return true;
+  }
+  if (message.type === "FETCH_ALERTS") {
+    fetchAlerts().then(sendResponse);
     return true;
   }
   if (message.type === "SAVE_ALERTS") {

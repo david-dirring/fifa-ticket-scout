@@ -1025,17 +1025,37 @@ function renderAlertsTab() {
     <div class="alerts-msg">Loading matches&hellip;</div>
   `;
 
-  // Load match list + face values + saved config in parallel
-  Promise.all([fetchMatchList(), fetchFaceValues(), loadSavedAlertConfig()]).then(([matches, faceValues, config]) => {
+  // Load match list + face values + cloud config in parallel.
+  // Cloud is the source of truth; local cache is a fallback when offline.
+  Promise.all([fetchMatchList(), fetchFaceValues(), fetchAlertsFromCloud()]).then(([matches, faceValues, cloudConfig]) => {
     matchList = matches || [];
     faceValueMap = buildFaceValueMap(faceValues || []);
-    if (config?.games) {
-      selectedAlertGames = new Map(
-        config.games.map((g) => [g.match_number, migratePickToNewShape(g)])
-      );
+
+    if (cloudConfig?.ok) {
+      // Canonical: overwrite local cache with the server copy
+      chrome.storage.local.set({ alertConfigs: cloudConfig });
+      if (cloudConfig.games?.length) {
+        selectedAlertGames = new Map(
+          cloudConfig.games.map((g) => [g.match_number, migratePickToNewShape(g)])
+        );
+      }
+      alertsTabLoaded = true;
+      renderAlertsForm(container, cloudConfig);
+      return;
     }
-    alertsTabLoaded = true;
-    renderAlertsForm(container, config);
+
+    // Cloud fetch failed — fall back to whatever's in local cache and
+    // surface an "offline" hint so the user knows they may be looking at
+    // stale data.
+    loadSavedAlertConfig().then((localConfig) => {
+      if (localConfig?.games) {
+        selectedAlertGames = new Map(
+          localConfig.games.map((g) => [g.match_number, migratePickToNewShape(g)])
+        );
+      }
+      alertsTabLoaded = true;
+      renderAlertsForm(container, localConfig, { offline: true });
+    });
   }).catch((err) => {
     container.innerHTML = `
       <div class="alerts-header"><h2>Alerts</h2></div>
@@ -1114,16 +1134,39 @@ function loadSavedAlertConfig() {
   });
 }
 
-function renderAlertsForm(container, savedConfig) {
+// Pull the canonical alert config from Supabase via the get-alerts Edge
+// Function. Returns the config on success, or null on any failure (network,
+// auth, server). The caller is responsible for falling back to the local
+// cache and rendering an offline state.
+function fetchAlertsFromCloud() {
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage({ type: "FETCH_ALERTS" }, (resp) => {
+      if (chrome.runtime.lastError || !resp?.ok) {
+        resolve(null);
+        return;
+      }
+      resolve(resp);
+    });
+  });
+}
+
+function renderAlertsForm(container, savedConfig, opts) {
   const gamesLocked = savedConfig?.gamesLocked === true;
   const savedEmail = savedConfig?.email || "";
   const count = selectedAlertGames.size;
+  const offline = opts?.offline === true;
 
   container.innerHTML = `
     <div class="alerts-header">
       <h2>Alerts</h2>
       <p class="alerts-subtitle">Pick 3 matches. We'll ping you when prices drop.</p>
+      ${offline ? '<span class="offline-chip" title="Could not reach the server — showing the picks from your last successful save">&#9888; Offline &mdash; cached picks</span>' : ''}
     </div>
+    ${gamesLocked ? '' : `
+    <div class="alerts-warning">
+      <strong>Choose your 3 matches carefully.</strong> Once you hit the <strong>+</strong> button on a match and save, that pick is final &mdash; only the price threshold can change later.
+    </div>
+    `}
 
     ${!savedEmail ? `
     <div class="alerts-section">

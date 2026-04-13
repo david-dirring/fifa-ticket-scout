@@ -6,6 +6,14 @@ All notable changes to FIFA Ticket Scout are documented here. Timestamps are in 
 
 ## April 13, 2026
 
+### Cloud Restore for Alerts + "Picks Are Final" Warning — 1:00 AM ET
+Added a `get-alerts` Edge Function so the extension can rehydrate the Alerts tab from Supabase whenever the local cache is missing or stale. Previously, if `chrome.storage.local.alertConfigs` was lost (extension reinstall, new browser, new machine, profile switch, Chrome Sync reset, or — until earlier today — a Clear & Rescan click), the Alerts tab would show as empty even though the dispatcher was still firing emails to the user from the server-side `alert_configs` row. Worse, re-saving with a different email would hit the email-lock 403 with no way for the user to recover. Now: every Alerts tab open does a cloud fetch first using the user's license key, falls back to local cache only on network/server failure, and shows a small "⚠ Offline — cached picks" chip in the header when running offline. Server is always the source of truth on conflict; local cache is purely an offline fallback. New `FETCH_ALERTS` message type in the background service worker, mirroring the existing `SAVE_ALERTS` structure (license verify → hash → service-role read on `alert_configs`).
+
+Also added a prominent orange warning banner at the top of the Alerts tab (before first save only) reminding users that match picks are final after saving — only price thresholds can change later. Disappears once `gamesLocked` becomes true so it doesn't nag users who already committed.
+
+**Files changed:** `extension/background.js`, `extension/popup.js`, `extension/popup.css`, `CHANGELOG.md`
+**Files added:** `supabase/functions/get-alerts/index.ts`
+
 ### Fix: Clear & Rescan No Longer Wipes Alerts — 12:00 AM ET
 The "Clear & Rescan" and "Clear Data" buttons on the Scanner tab were silently destroying the user's saved Alerts tab picks (matches, thresholds, category, seats) as a side effect. Root cause: the `CLEAR_DATA` background handler used `chrome.storage.local.clear()` and manually rescued only the `license` key, so any other top-level key (including `alertConfigs` and `visitorId`) got nuked. Replaced the clear-then-restore dance with a surgical `chrome.storage.local.remove("games")` — only the captured scan data is removed, everything else (Alerts picks, license, visitor ID, scan speed preference, filter state) is untouched. Forward-compatible: any future storage key automatically survives by default. Also fixes a silent secondary bug where `visitorId` (the anonymous Supabase attribution key) was being regenerated on every Clear & Rescan, inflating "unique scanners" stats and breaking per-user scan history correlation on the backend.
 
