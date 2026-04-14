@@ -1,5 +1,7 @@
 # Chrome Web Store Listing
 
+_Listing version: 2.1.1 — last updated April 14, 2026_
+
 Copy for the [Chrome Web Store Developer Dashboard](https://chrome.google.com/webstore/devconsole).
 
 ---
@@ -50,25 +52,36 @@ Collapsible table showing every stadium block with seat count, min price, and ma
 Download all seat data as a CSV file with match details, timestamps, and per-seat pricing. Great for analysis or sharing with your group.
 
 ★ Scan Speed Control
-Choose from four scan speeds — Stealth, Cautious, Balanced, or Aggressive — to balance speed vs. detection risk. Stealth and Cautious are Pro features for users who want the lowest risk possible.
+Choose from four scan speeds — Stealth, Cautious, Balanced, or Aggressive — to balance speed vs. detection risk. Balanced is free; Stealth, Cautious, and Aggressive are Pro features for users who want maximum control over scan pacing.
 
 ★ Automatic Full Scan
-When you open a match, the extension scans all map sections automatically so you have complete data from the start. Hit "Clear & Rescan" and refresh to get a fresh snapshot anytime. Resilient to intermittent bot detection — skips blocked sections and retries.
+When you open a match, the extension scans all map sections automatically so you have complete data from the start. A header badge shows SCANNING while a scan is in progress and SCANNED once it finishes, so you always know whether you're looking at a fresh snapshot. Hit "Clear & Rescan" for a fresh snapshot anytime. Resilient to intermittent bot detection — skips blocked sections and retries.
 
 ★ Multi-Tab Support (Pro)
-Open multiple matches in different tabs and track them all simultaneously. Free users can view one match at a time.
+Open multiple matches in different tabs and track them all simultaneously. Free users can view one match at a time. (Pro and above.)
+
+★ Price Drop Alerts (Pro + Web + Alerts)
+Pick up to 3 World Cup matches and get emailed the moment resale prices cross your threshold. Three targeting modes — % vs face value, $ vs face value, or absolute $ — plus category filter (Any / CAT 1 / CAT 2 / CAT 3) and number of seats needed. Picks are cloud-backed so they survive reinstalls, profile switches, and new machines. A per-match 24-hour cooldown keeps your inbox quiet, with re-fires only on meaningful price drops.
 
 ★ Smart Filtering
 Seats currently in another buyer's cart are automatically hidden so you only see what's actually available. No phantom listings cluttering your results.
 
 ★ Crowdsourced Data
-Every scan contributes anonymously to a shared database. Pro users will soon get access to Market Intel — crowdsourced pricing data across all matches — plus a web dashboard with price trends and email alerts for price drops.
+Every scan contributes anonymously to a shared database so the community benefits from every user's scans. Pro + Web + Alerts users can already set up price drop alerts backed by this data. A public web dashboard with price trends and in-extension Market Intel are coming soon for Pro + Web subscribers.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 FREE VS PRO
 
-The extension is fully functional for free. Pro unlocks extra scan speeds, multi-tab support, and upcoming features like Market Intel, a web dashboard, and price drop alerts.
+The extension is fully functional for free. Paid tiers unlock extra scan speeds, multi-tab support, and — at the top tier — price drop email alerts.
+
+• Free — Full dashboard, auto-scan at Balanced speed, category filters, histograms, best deals, CSV export, and contributing to crowdsourced data. Everything you need to find good seats for one match at a time.
+
+• Pro — Adds Stealth, Cautious, and Aggressive scan speeds plus multi-tab support (track several matches at once).
+
+• Pro + Web — Everything in Pro, plus upcoming access to the web dashboard with price trends and in-extension Market Intel.
+
+• Pro + Web + Alerts — Everything in Pro + Web, plus the Alerts tab: price drop email alerts for up to 3 matches with customizable thresholds and filters.
 
 Get a license key at: https://daviddirring.gumroad.com/
 
@@ -120,10 +133,10 @@ English
 
 | Asset | Spec | Notes |
 |-------|------|-------|
-| Extension icon | 128×128 PNG | Already exists: `extension/icons/icon128.png` |
-| Small promo tile | 440×280 PNG | Needed — shown in search results |
-| Screenshots | 1280×800 or 640×400 PNG | Need 1–5 screenshots of the popup in action |
-| Marquee promo | 1400×560 PNG (optional) | Large banner for featured placement |
+| Extension icon | 128×128 PNG | Done — `extension/icons/icon128.png` |
+| Small promo tile | 440×280 PNG | Done — `store-assets/promo-tile-440x280.png` (also `store-assets/promo-small-440x280.png`) |
+| Screenshots | 1280×800 or 640×400 PNG | Done — `store-assets/screenshot-1-dashboard.png`, `store-assets/screenshot-2-deals.png`. Consider adding a third showing the Alerts tab. |
+| Marquee promo | 1400×560 PNG (optional) | Done — `store-assets/marquee-1400x560.png` |
 
 ### Suggested Screenshots
 
@@ -183,18 +196,21 @@ Periodically re-verifies Pro license keys (every 24 hours) to ensure they remain
 
 api.gumroad.com — Verifies Pro license keys purchased through Gumroad.
 
-*.supabase.co — Syncs anonymous scan data to a shared database for crowdsourced pricing features.
+*.supabase.co — Syncs anonymous scan data to a shared database for crowdsourced pricing features. Also used by Pro + Web + Alerts users to save price-drop alert picks and thresholds to their license-keyed account.
+
+raw.githubusercontent.com — Fetches the public `version.json` file from the extension's GitHub repository to check whether a newer release is available and surface an "update available" hint to the user. No authentication, no user data sent.
 ```
 
 ---
 
 ## Store Listing Checklist
 
-- [ ] Create a Chrome Web Store developer account ($5 one-time fee)
-- [ ] Prepare 128×128 icon (already done)
-- [ ] Create 440×280 small promotional tile
-- [ ] Capture 3–5 screenshots at 1280×800
-- [ ] Add a privacy policy URL (can be a GitHub page or a simple hosted page)
-- [ ] Add `LICENSE` file to the repository
-- [ ] Upload extension ZIP (the `extension/` folder contents)
+- [ ] Create a Chrome Web Store developer account ($5 one-time fee, if not already done)
+- [x] Prepare 128×128 icon (`extension/icons/icon128.png`)
+- [x] Create 440×280 small promotional tile (`store-assets/promo-tile-440x280.png`)
+- [x] Capture 1280×800 screenshots (`store-assets/screenshot-1-dashboard.png`, `store-assets/screenshot-2-deals.png`)
+- [x] Create 1400×560 marquee promo (`store-assets/marquee-1400x560.png`)
+- [x] Privacy policy in repo (`PRIVACY.md`) — host via GitHub raw or a simple page
+- [x] `LICENSE` file in the repository
+- [ ] Upload extension ZIP (contents of `extension/`, v2.1.1)
 - [ ] Submit for review
