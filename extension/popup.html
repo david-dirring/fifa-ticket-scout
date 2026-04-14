@@ -22,7 +22,7 @@
           <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M9.16 4.945c0-.04.02-.08.06-.1.22-.12 1.86-.84 3.94-.84 1.32 0 2.3.34 2.92.6.14.06.24.08.34.08.18 0 .3-.1.36-.28l.44-1.32c.04-.1.06-.2.06-.28 0-.18-.1-.34-.3-.44C16.3 2.025 14.78 1.505 12.76 1.505c-2.5 0-4.7.88-5.16 1.1-.2.1-.3.24-.3.44v15.5c0 .28.14.44.4.52.7.2 2.44.76 5.06.76 2.28 0 4.04-.48 4.74-.72.2-.06.32-.22.32-.44v-1.56c0-.2-.14-.34-.34-.34-.06 0-.14.02-.22.04-.7.24-2.1.6-3.7.6-2.06 0-3.68-.46-4.14-.62-.04-.02-.06-.04-.06-.08v-5.52c0-.04.02-.06.06-.08.36-.12 1.7-.5 3.54-.5 1.56 0 2.78.32 3.36.52.14.04.24.06.32.06.2 0 .32-.14.32-.36v-1.44c0-.2-.12-.36-.32-.44-.62-.22-1.96-.58-3.68-.58-1.84 0-3.18.38-3.54.5-.04.02-.06 0-.06-.04V4.945z"/></svg>
         </a>
         <span class="badge" id="liveBadge" style="display:none;">
-          <span class="live-dot"></span> LIVE
+          <span class="live-dot"></span> <span id="liveBadgeText">SCANNED</span>
         </span>
       </div>
     </div>
@@ -50,6 +50,9 @@
     </div>
     <p class="empty-title" id="emptyTitle">FIFA Ticket Scout</p>
     <p class="empty-hint" id="emptyHint">Open the FIFA resale ticket site and browse a seat map to start capturing prices.</p>
+    <div class="empty-help" id="scanningHelp" style="display:none;">
+      <p><strong>Stuck here?</strong> If you see this screen for more than 10 seconds, try clicking <strong>BUY TICKETS</strong> in the top right of the FIFA site, then <strong>BUY</strong>, then navigate back to your game.</p>
+    </div>
     <a class="btn btn-small" id="emptyAction" href="#" style="display:none;"></a>
   </div>
 

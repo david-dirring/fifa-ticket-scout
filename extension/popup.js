@@ -137,15 +137,18 @@ function showEmpty(isFifaSite, isSeatMap) {
   const title = document.getElementById("emptyTitle");
   const hint = document.getElementById("emptyHint");
   const action = document.getElementById("emptyAction");
+  const scanningHelp = document.getElementById("scanningHelp");
 
   if (isSeatMap) {
     title.textContent = "Scanning\u2026";
     hint.textContent = "Capturing seat data from the map. This usually takes a few seconds.";
     action.style.display = "none";
+    scanningHelp.style.display = "block";
   } else if (isFifaSite) {
     title.textContent = "Open a seat map";
     hint.textContent = "You\u2019re on the FIFA ticket site \u2014 select a match and open its seat map to start capturing prices.";
     action.style.display = "none";
+    scanningHelp.style.display = "none";
   } else {
     title.textContent = "FIFA Ticket Scout";
     hint.textContent = "Open the FIFA resale ticket site and browse a seat map to start capturing prices.";
@@ -155,6 +158,7 @@ function showEmpty(isFifaSite, isSeatMap) {
       e.preventDefault();
       chrome.tabs.create({ url: "https://fwc26-resale-usd.tickets.fifa.com" });
     };
+    scanningHelp.style.display = "none";
   }
 }
 
@@ -1829,6 +1833,12 @@ function updateScanProgress(perfId, completed, total, status, eta) {
   if (perfId && currentPerfId && perfId !== currentPerfId) return;
   const pct = Math.round((completed / total) * 100);
   document.getElementById("progressFill").style.width = pct + "%";
+
+  // Header badge: SCANNING while in progress, SCANNED once done.
+  const badgeText = document.getElementById("liveBadgeText");
+  if (badgeText) {
+    badgeText.textContent = (status === "done" || pct >= 100) ? "SCANNED" : "SCANNING";
+  }
 
   // Track scan timing
   if (pct > 0 && scanStartTime === 0) scanStartTime = Date.now();

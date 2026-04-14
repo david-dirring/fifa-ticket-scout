@@ -1141,12 +1141,6 @@ body {
   height: 6px;
   background: var(--green);
   border-radius: 50%;
-  animation: pulse 1.5s ease-in-out infinite;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.35; }
 }
 
 /* ---- Empty State ---- */
@@ -1173,6 +1167,23 @@ body {
   line-height: 1.5;
   max-width: 280px;
   margin: 0 auto;
+}
+
+.empty-help {
+  margin: 18px auto 0;
+  max-width: 280px;
+  padding: 10px 14px;
+  background: var(--fifa-purple-dim);
+  border: 1px solid rgba(26, 61, 143, 0.15);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--gray-700);
+  text-align: left;
+}
+
+.empty-help strong {
+  color: var(--gray-900);
 }
 
 /* ---- Match Info ---- */
