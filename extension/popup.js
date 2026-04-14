@@ -995,6 +995,22 @@ let faceValueMap = {}; // match_number -> { cat1, cat2, cat3 }
 let selectedAlertGames = new Map(); // match_number -> prefs
 let alertFilters = { search: "", stages: new Set(["All"]), countries: new Set() };
 let expandedDrawer = null; // match_number of currently open drawer
+// Pick limit + per-pick lock state. Both come from the get-alerts response on
+// every render so the server is the single source of truth for MAX_PICKS;
+// fallback default is 3 if the server response hasn't loaded yet.
+let maxPicks = 3;
+let lockedMatchNumbers = new Set(); // match_numbers that came from saved config
+
+function isPickLocked(matchNumber) {
+  return lockedMatchNumbers.has(matchNumber);
+}
+
+function hasAnyUnlockedPick() {
+  for (const pick of selectedAlertGames.values()) {
+    if (!isPickLocked(pick.match_number)) return true;
+  }
+  return false;
+}
 
 // City → host country
 const CITY_COUNTRY = {
@@ -1024,7 +1040,7 @@ function renderAlertsTab() {
   container.innerHTML = `
     <div class="alerts-header">
       <h2>Alerts</h2>
-      <p class="alerts-subtitle">Pick 3 matches. We'll ping you when prices drop.</p>
+      <p class="alerts-subtitle">Pick ${maxPicks} matches. We'll ping you when prices drop.</p>
     </div>
     <div class="alerts-msg">Loading matches&hellip;</div>
   `;
@@ -1155,22 +1171,29 @@ function fetchAlertsFromCloud() {
 }
 
 function renderAlertsForm(container, savedConfig, opts) {
-  const gamesLocked = savedConfig?.gamesLocked === true;
+  // Pull MAX_PICKS from the server response (fallback to current value).
+  // Build the per-pick lock set from the saved config — a pick is "locked"
+  // if it was already in the saved config when this form rendered.
+  if (typeof savedConfig?.maxPicks === "number") maxPicks = savedConfig.maxPicks;
+  lockedMatchNumbers = new Set((savedConfig?.games || []).map((g) => g.match_number));
+
   const savedEmail = savedConfig?.email || "";
   const count = selectedAlertGames.size;
+  const slotsAvailable = count < maxPicks;
+  const hasUnlocked = hasAnyUnlockedPick();
   const offline = opts?.offline === true;
 
   container.innerHTML = `
     <div class="alerts-header">
       <h2>Alerts</h2>
-      <p class="alerts-subtitle">Pick 3 matches. We'll ping you when prices drop.</p>
+      <p class="alerts-subtitle">Pick ${maxPicks} matches. We'll ping you when prices drop.</p>
       ${offline ? '<span class="offline-chip" title="Could not reach the server — showing the picks from your last successful save">&#9888; Offline &mdash; cached picks</span>' : ''}
     </div>
-    ${gamesLocked ? '' : `
+    ${slotsAvailable ? `
     <div class="alerts-warning">
-      <strong>Choose your 3 matches carefully.</strong> Once you hit the <strong>+</strong> button on a match and save, that pick is final &mdash; only the price threshold can change later.
+      <strong>Choose your matches carefully.</strong> Once you hit the <strong>+</strong> button on a match and save, that pick is final &mdash; only the price threshold can change later.
     </div>
-    `}
+    ` : ''}
 
     ${!savedEmail ? `
     <div class="alerts-section">
@@ -1192,12 +1215,12 @@ function renderAlertsForm(container, savedConfig, opts) {
     <div class="picks-section">
       <div class="picks-header">
         <span class="picks-title">Your Picks</span>
-        <span class="picks-counter">${count} of 3${gamesLocked ? ' &middot; Locked' : ''}</span>
+        <span class="picks-counter">${count} of ${maxPicks}</span>
       </div>
       <div id="pickSlots"></div>
     </div>
 
-    ${!gamesLocked ? `
+    ${slotsAvailable ? `
     <!-- Browse -->
     <div class="alerts-browse">
       <input type="text" id="alertsSearch" class="alerts-search" placeholder="Search team, city, or stage..." value="${escapeHtml(alertFilters.search)}">
@@ -1210,13 +1233,13 @@ function renderAlertsForm(container, savedConfig, opts) {
 
     <div id="alertsMsg"></div>
 
-    <button class="btn-save-alerts" id="saveAlertsBtn" ${count === 0 && !gamesLocked ? "disabled" : ""}>
-      ${gamesLocked ? "Update Price Thresholds" : `Save my ${count > 0 ? count : ""} pick${count !== 1 ? "s" : ""}`}
+    <button class="btn-save-alerts" id="saveAlertsBtn" ${count === 0 ? "disabled" : ""}>
+      ${hasUnlocked ? `Save my ${count} pick${count !== 1 ? "s" : ""}` : "Update Price Thresholds"}
     </button>
   `;
 
-  renderPickSlots(gamesLocked);
-  if (!gamesLocked) {
+  renderPickSlots();
+  if (slotsAvailable) {
     renderFilterPills();
     renderMatchList();
     document.getElementById("alertsSearch").addEventListener("input", (e) => {
@@ -1227,17 +1250,17 @@ function renderAlertsForm(container, savedConfig, opts) {
   document.getElementById("saveAlertsBtn").addEventListener("click", handleSaveAlerts);
 }
 
-function renderPickSlots(gamesLocked) {
+function renderPickSlots() {
   const slotsEl = document.getElementById("pickSlots");
-  const slots = [1, 2, 3];
+  const slots = Array.from({ length: maxPicks }, (_, i) => i + 1);
   const picks = Array.from(selectedAlertGames.values());
 
   slotsEl.innerHTML = slots.map((n) => {
     const pick = picks[n - 1];
     if (!pick) {
-      if (gamesLocked) return "";
       return `<div class="pick-slot pick-slot-empty">+ Add pick ${n}</div>`;
     }
+    const locked = isPickLocked(pick.match_number);
     const match = matchList.find((m) => m.match_number === pick.match_number);
     if (!match) return "";
     const teams = (match.home_team && match.away_team)
@@ -1251,13 +1274,13 @@ function renderPickSlots(gamesLocked) {
       <div class="pick-slot ${isExpanded ? 'expanded' : ''}" data-match="${pick.match_number}">
         <div class="pick-slot-header">
           <div class="pick-slot-info">
-            <div class="pick-slot-teams">#${pick.match_number} &middot; ${escapeHtml(teams)} ${gamesLocked ? '<span class="lock-inline">&#x1F512;</span>' : ''}</div>
+            <div class="pick-slot-teams">#${pick.match_number} &middot; ${escapeHtml(teams)} ${locked ? '<span class="lock-inline">&#x1F512;</span>' : ''}</div>
             <div class="pick-slot-meta">${escapeHtml(match.city || "")} &middot; ${escapeHtml(match.stage || "")} &middot; ${dateStr}</div>
             <div class="pick-summary">${summary}</div>
           </div>
           <button class="pick-edit-btn" data-edit="${pick.match_number}">${isExpanded ? 'Close' : 'Edit'}</button>
         </div>
-        ${isExpanded ? renderThresholdDrawer(pick, gamesLocked) : ""}
+        ${isExpanded ? renderThresholdDrawer(pick, locked) : ""}
       </div>
     `;
   }).join("");
@@ -1268,12 +1291,12 @@ function renderPickSlots(gamesLocked) {
       e.stopPropagation();
       const matchNum = parseInt(btn.dataset.edit);
       expandedDrawer = expandedDrawer === matchNum ? null : matchNum;
-      renderPickSlots(gamesLocked);
+      renderPickSlots();
     });
   });
 
   // Wire up drawer inputs
-  wireThresholdDrawer(gamesLocked);
+  wireThresholdDrawer();
 }
 
 // Normalize a saved game config into the current pref shape.
@@ -1425,7 +1448,7 @@ function sliderLabelForMode(pick) {
   return formatPercentLabel(pick.percentOfFace || 0);
 }
 
-function renderThresholdDrawer(pick, gamesLocked) {
+function renderThresholdDrawer(pick, locked) {
   const category = pick.category || "any";
   const seats = pick.seats || 2;
   const mode = pick.thresholdMode || "percent";
@@ -1473,7 +1496,7 @@ function renderThresholdDrawer(pick, gamesLocked) {
         <button class="step-btn" data-step="+1">+</button>
       </div>
 
-      ${!gamesLocked ? `
+      ${!locked ? `
       <div class="drawer-actions">
         <button class="drawer-remove" data-remove="${pick.match_number}">Remove pick</button>
       </div>
@@ -1482,7 +1505,7 @@ function renderThresholdDrawer(pick, gamesLocked) {
   `;
 }
 
-function wireThresholdDrawer(gamesLocked) {
+function wireThresholdDrawer() {
   document.querySelectorAll(".threshold-drawer").forEach((drawer) => {
     const matchNum = parseInt(drawer.dataset.match);
     const prefs = selectedAlertGames.get(matchNum);
@@ -1501,7 +1524,7 @@ function wireThresholdDrawer(gamesLocked) {
           if (fv != null) prefs.absolute = fv;
         }
         selectedAlertGames.set(matchNum, prefs);
-        renderPickSlots(gamesLocked);
+        renderPickSlots();
       });
     });
 
@@ -1526,7 +1549,7 @@ function wireThresholdDrawer(gamesLocked) {
         const cfg = sliderConfigForMode(mode);
         slider.style.setProperty("--fill", sliderFillPct(v, cfg.min, cfg.max) + "%");
       });
-      slider.addEventListener("change", () => renderPickSlots(gamesLocked));
+      slider.addEventListener("change", () => renderPickSlots());
     }
 
     // Category pills
@@ -1535,7 +1558,7 @@ function wireThresholdDrawer(gamesLocked) {
         e.stopPropagation();
         prefs.category = btn.dataset.cat;
         selectedAlertGames.set(matchNum, prefs);
-        renderPickSlots(gamesLocked);
+        renderPickSlots();
       });
     });
 
@@ -1547,7 +1570,7 @@ function wireThresholdDrawer(gamesLocked) {
         const next = Math.max(1, Math.min(6, (prefs.seats || 2) + delta));
         prefs.seats = next;
         selectedAlertGames.set(matchNum, prefs);
-        renderPickSlots(gamesLocked);
+        renderPickSlots();
       });
     });
 
@@ -1643,7 +1666,7 @@ function renderMatchList() {
 
   const filtered = filterMatches();
   const count = selectedAlertGames.size;
-  const canAdd = count < 3;
+  const canAdd = count < maxPicks;
 
   headerEl.innerHTML = `Showing ${filtered.length} of ${matchList.length}`;
 
@@ -1677,7 +1700,7 @@ function renderMatchList() {
       e.stopPropagation();
       const matchNum = parseInt(btn.dataset.add);
       if (selectedAlertGames.has(matchNum)) return;
-      if (selectedAlertGames.size >= 3) return;
+      if (selectedAlertGames.size >= maxPicks) return;
       addGameSelection(matchNum);
     });
   });
@@ -1723,20 +1746,23 @@ function handleSaveAlerts() {
   const emailInput = document.getElementById("alertsEmail");
 
   loadSavedAlertConfig().then((config) => {
-    const gamesLocked = config?.gamesLocked === true;
-    const email = config?.email || (emailInput ? emailInput.value.trim() : "");
+    const savedEmail = config?.email || "";
+    const email = savedEmail || (emailInput ? emailInput.value.trim() : "");
 
-    // Validate email (only if not locked)
-    if (!gamesLocked) {
-      if (!validEmail(email)) {
-        msgEl.innerHTML = '<div class="alerts-msg error">Please enter a single valid email address.</div>';
-        return;
-      }
-      if (selectedAlertGames.size === 0) {
-        msgEl.innerHTML = '<div class="alerts-msg error">Pick at least one game.</div>';
-        return;
-      }
-      // Pre-save confirmation
+    // Email validation only when there's no saved one yet
+    if (!savedEmail && !validEmail(email)) {
+      msgEl.innerHTML = '<div class="alerts-msg error">Please enter a single valid email address.</div>';
+      return;
+    }
+
+    if (selectedAlertGames.size === 0) {
+      msgEl.innerHTML = '<div class="alerts-msg error">Pick at least one game.</div>';
+      return;
+    }
+
+    // Confirm only when we're about to lock at least one NEW pick.
+    // Threshold-only updates (all picks already locked) skip the dialog.
+    if (hasAnyUnlockedPick()) {
       const confirmed = confirm(
         "Lock in these matches?\n\n" +
         "To keep alerts for true fans, the matches you pick are permanent.\n\n" +
@@ -1777,13 +1803,13 @@ function handleSaveAlerts() {
       { type: "SAVE_ALERTS", payload: { email, games } },
       (resp) => {
         if (resp?.ok) {
-          msgEl.innerHTML = '<div class="alerts-msg success">Locked in. We\'re watching these for you.</div>';
+          msgEl.innerHTML = '<div class="alerts-msg success">Saved. We\'re watching these for you.</div>';
           alertsTabLoaded = false; // force reload on next open
           setTimeout(() => renderAlertsTab(), 600);
         } else {
           msgEl.innerHTML = `<div class="alerts-msg error">${resp?.error || "Save failed. Try again."}</div>`;
           btn.disabled = false;
-          btn.textContent = gamesLocked ? "Update Price Thresholds" : "Save my picks";
+          btn.textContent = hasAnyUnlockedPick() ? "Save my picks" : "Update Price Thresholds";
         }
       }
     );

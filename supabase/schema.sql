@@ -69,7 +69,10 @@ CREATE TABLE alert_configs (
   games           jsonb NOT NULL,
   games_locked    boolean DEFAULT true,
   created_at      timestamptz DEFAULT now(),
-  updated_at      timestamptz DEFAULT now()
+  updated_at      timestamptz DEFAULT now(),
+  -- TTL for the alert config. Set on insert, never updated. To change later:
+  --   ALTER TABLE alert_configs ALTER COLUMN expires_at SET DEFAULT (now() + interval '14 days');
+  expires_at      timestamptz NOT NULL DEFAULT (now() + interval '180 days')
 );
 
 CREATE INDEX idx_alert_configs_license ON alert_configs (license_hash);

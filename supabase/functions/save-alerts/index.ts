@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { MAX_PICKS } from "../_shared/alert_constants.ts";
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -47,8 +48,8 @@ Deno.serve(async (req) => {
     if (/[,;\s]/.test(email)) {
       return jsonResponse({ ok: false, error: "Only one email address allowed" }, 400);
     }
-    if (!Array.isArray(games) || games.length === 0 || games.length > 3) {
-      return jsonResponse({ ok: false, error: "Must have 1-3 games" }, 400);
+    if (!Array.isArray(games) || games.length === 0 || games.length > MAX_PICKS) {
+      return jsonResponse({ ok: false, error: `Must have 1-${MAX_PICKS} games` }, 400);
     }
 
     // Validate each game
@@ -86,7 +87,7 @@ Deno.serve(async (req) => {
     // --- Check for existing config ---
     const { data: existing } = await supabase
       .from("alert_configs")
-      .select("email, games_locked")
+      .select("email, games, games_locked")
       .eq("license_hash", licenseHash)
       .maybeSingle();
 
@@ -99,8 +100,34 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Update games preferences only
-      // (game selections are already locked, but price thresholds can change)
+      // Per-pick lock enforcement: every match_number that was previously saved
+      // must still be present (no removal) and must keep the same performance_id
+      // (no swap). New match_numbers can be added freely up to MAX_PICKS.
+      const existingGames: any[] = existing.games || [];
+      const existingByMatch = new Map<number, any>();
+      for (const g of existingGames) existingByMatch.set(g.match_number, g);
+      const incomingMatchNumbers = new Set<number>(games.map((g: any) => g.match_number));
+
+      for (const lockedMatch of existingByMatch.keys()) {
+        if (!incomingMatchNumbers.has(lockedMatch)) {
+          return jsonResponse(
+            { ok: false, error: `Cannot remove locked pick #${lockedMatch}` },
+            403
+          );
+        }
+      }
+      for (const incoming of games) {
+        const locked = existingByMatch.get(incoming.match_number);
+        if (locked && locked.performance_id !== incoming.performance_id) {
+          return jsonResponse(
+            { ok: false, error: `Cannot change performance_id of locked pick #${incoming.match_number}` },
+            403
+          );
+        }
+      }
+
+      // expires_at intentionally NOT touched on update — TTL stays frozen
+      // from the original insert.
       const { error: updateError } = await supabase
         .from("alert_configs")
         .update({
@@ -120,10 +147,11 @@ Deno.serve(async (req) => {
         .insert({ license_hash: licenseHash, email, games, action: "update" });
       if (historyError) console.error("history update error:", historyError);
 
-      return jsonResponse({ ok: true, gamesLocked: true });
+      return jsonResponse({ ok: true, gamesLocked: true, maxPicks: MAX_PICKS });
     }
 
     // --- Insert new config ---
+    // expires_at uses the SQL column DEFAULT (now() + interval '180 days').
     const { error: insertError } = await supabase.from("alert_configs").insert({
       license_hash: licenseHash,
       email,
@@ -142,7 +170,7 @@ Deno.serve(async (req) => {
       .insert({ license_hash: licenseHash, email, games, action: "insert" });
     if (historyError) console.error("history insert error:", historyError);
 
-    return jsonResponse({ ok: true, gamesLocked: true });
+    return jsonResponse({ ok: true, gamesLocked: true, maxPicks: MAX_PICKS });
   } catch (err) {
     console.error("save-alerts error:", err);
     return jsonResponse({ ok: false, error: "Server error" }, 500);
