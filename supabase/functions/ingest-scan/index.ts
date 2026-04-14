@@ -9,10 +9,10 @@ const supabase = createClient(
 const VISITOR_ID_RE = /^[a-f0-9]{32}$/i;
 const PERFORMANCE_ID_RE = /^\d{5,20}$/;
 const RATE_LIMIT_PER_MINUTE = 10;
-const MIN_SEAT_COUNT = 10;
-const MAX_SEAT_COUNT = 15000;
+const MIN_SEAT_COUNT = 1;
+const MAX_SEAT_COUNT = 50000;
 const MIN_PRICE_MILLICENTS = 1000;        // ~$1
-const MAX_PRICE_MILLICENTS = 100000000;   // ~$100k
+const MAX_PRICE_MILLICENTS = 2147483647;  // int4 max (~$2.1M) — Postgres `seats.price` is int4, so this is the real ceiling
 const MAX_FIELD_LENGTH = 100;
 
 function jsonResponse(body: any, status = 200) {
@@ -46,12 +46,17 @@ Deno.serve(async (req) => {
       return jsonResponse({ ok: false, error: "Invalid seats payload" }, 400);
     }
 
-    const seatEntries = Object.entries(seats);
-    if (seatEntries.length < MIN_SEAT_COUNT || seatEntries.length > MAX_SEAT_COUNT) {
+    let seatEntries = Object.entries(seats);
+    if (seatEntries.length < MIN_SEAT_COUNT) {
       return jsonResponse(
-        { ok: false, error: `Seat count must be between ${MIN_SEAT_COUNT} and ${MAX_SEAT_COUNT}` },
+        { ok: false, error: `Seat count below ${MIN_SEAT_COUNT}` },
         400
       );
+    }
+    // Soft cap: trim runaway payloads instead of rejecting.
+    if (seatEntries.length > MAX_SEAT_COUNT) {
+      console.log(`ingest-scan: trimmed ${seatEntries.length - MAX_SEAT_COUNT} seats over cap (perf=${performanceId})`);
+      seatEntries = seatEntries.slice(0, MAX_SEAT_COUNT);
     }
 
     // --- Match name validation (must look like FIFA data) ---
@@ -60,31 +65,59 @@ Deno.serve(async (req) => {
       return jsonResponse({ ok: false, error: "Invalid match name" }, 400);
     }
 
-    // --- Per-seat validation ---
+    // --- Per-seat cleaning: salvage the scan, don't reject it over single-seat anomalies. ---
+    // Price: clamp high, null low/non-numeric (Postgres `seats.price` is nullable).
+    // Oversized string fields: truncate. Bad seatId (primary key): drop the seat.
     const priceCounts: Record<string, number> = {};
+    const cleanedSeats: Record<string, any> = {};
+    let droppedSeats = 0;
+
     for (const [seatId, s] of seatEntries) {
       const seat = s as any;
       if (typeof seatId !== "string" || seatId.length > MAX_FIELD_LENGTH) {
-        return jsonResponse({ ok: false, error: "Invalid seat ID" }, 400);
+        droppedSeats++;
+        continue;
       }
-      if (typeof seat.price !== "number" || seat.price < MIN_PRICE_MILLICENTS || seat.price > MAX_PRICE_MILLICENTS) {
-        return jsonResponse({ ok: false, error: "Seat price out of range" }, 400);
+
+      let price: number | null = null;
+      if (typeof seat.price === "number" && Number.isFinite(seat.price)) {
+        if (seat.price > MAX_PRICE_MILLICENTS) price = MAX_PRICE_MILLICENTS;
+        else if (seat.price >= MIN_PRICE_MILLICENTS) price = seat.price;
       }
-      // Field length checks
+
+      const cleaned: any = { ...seat, price };
       for (const field of ["block", "area", "row", "seat", "category"]) {
         const val = seat[field];
-        if (val != null && (typeof val !== "string" || val.length > MAX_FIELD_LENGTH)) {
-          return jsonResponse({ ok: false, error: `Invalid seat.${field}` }, 400);
+        if (typeof val === "string" && val.length > MAX_FIELD_LENGTH) {
+          cleaned[field] = val.slice(0, MAX_FIELD_LENGTH);
         }
       }
-      // Track price frequency
-      priceCounts[seat.price] = (priceCounts[seat.price] || 0) + 1;
+
+      cleanedSeats[seatId] = cleaned;
+      if (price !== null) {
+        priceCounts[price] = (priceCounts[price] || 0) + 1;
+      }
+    }
+
+    const cleanedEntries = Object.entries(cleanedSeats);
+    if (cleanedEntries.length < MIN_SEAT_COUNT) {
+      return jsonResponse(
+        { ok: false, error: `Seat count after cleaning below ${MIN_SEAT_COUNT}` },
+        400
+      );
+    }
+
+    if (droppedSeats > 0) {
+      console.log(`ingest-scan: dropped ${droppedSeats} seats with bad IDs (perf=${performanceId})`);
     }
 
     // Reject if >50% of seats have the same price (synthetic data)
-    const maxSamePrice = Math.max(...Object.values(priceCounts));
-    if (maxSamePrice / seatEntries.length > 0.5) {
-      return jsonResponse({ ok: false, error: "Suspicious price distribution" }, 400);
+    const priceValues = Object.values(priceCounts);
+    if (priceValues.length > 0) {
+      const maxSamePrice = Math.max(...priceValues);
+      if (maxSamePrice / cleanedEntries.length > 0.5) {
+        return jsonResponse({ ok: false, error: "Suspicious price distribution" }, 400);
+      }
     }
 
     // --- Rate limiting per visitor_id ---
@@ -107,8 +140,8 @@ Deno.serve(async (req) => {
       performance_id: performanceId,
       visitor_id: visitorId,
       license_hash: licenseHash || null,
-      seat_count: seatEntries.length,
-      seats_data: seats,
+      seat_count: cleanedEntries.length,
+      seats_data: cleanedSeats,
       currency: match?.currency || "USD",
       match_name: match?.name || null,
       match_date: match?.date || null,
@@ -129,7 +162,7 @@ Deno.serve(async (req) => {
     }
 
     const now = new Date().toISOString();
-    const seatRows = seatEntries.map(([seatId, s]: [string, any]) => ({
+    const seatRows = cleanedEntries.map(([seatId, s]: [string, any]) => ({
       performance_id: performanceId,
       seat_id: seatId,
       block: s.block || null,
