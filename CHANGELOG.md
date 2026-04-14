@@ -4,6 +4,37 @@ All notable changes to FIFA Ticket Scout are documented here. Timestamps are in 
 
 ---
 
+## April 14, 2026
+
+### Alerts Fix: Per-Pick Locking + Centralized MAX_PICKS + 180-Day TTL — 2:30 AM ET
+Fixed the "saved 1 pick, can't add the other 2" bug reported by a Pro + Web + Alerts user. The original lock was per-config (`games_locked` flag at the whole-form level), so saving with any count N < 3 hid the match browser entirely and there was no way to top off the remaining slots. Lock is now **per-pick**: saved matches remain permanent individually (lock icon + threshold-only edit drawer), but the browse section and empty pick slots stay visible whenever total picks < `MAX_PICKS`. New picks added in a later session trigger the same confirm dialog as the original first save and lock once committed. Server-side enforcement added in `save-alerts`: fetches the existing games array on update, rejects any request that drops a locked match or swaps its `performance_id`. Unsaved picks in the current session can still be freely removed via the drawer's "Remove pick" button, which only renders for unlocked picks.
+
+Also centralized the `MAX_PICKS = 3` constant into a new `supabase/functions/_shared/alert_constants.ts` module, imported by both `save-alerts` and `get-alerts`. Both Edge Functions return it as `maxPicks` in their JSON response; the popup reads from there and drives every former literal `3` off it (slot iteration, counter, subtitle, browser visibility check, add-button guard). Changing the per-user pick limit is now one constant edit + `supabase functions deploy` for both functions — the popup auto-syncs on next `loadSavedAlertConfig()` call with zero client rebuild.
+
+Added an `expires_at` column to `alert_configs` with a 180-day SQL default. Set on insert via the column default, never touched on update — adding picks later does not roll the TTL forward. Returned as `expiresAt` (ms epoch) from `get-alerts` for future UI use; popup ignores it for now. Live migration + backfill for existing rows (`expires_at = created_at + interval '180 days'`) ran by hand in the Supabase SQL Editor.
+
+**Files changed:** `extension/popup.js`, `supabase/functions/save-alerts/index.ts`, `supabase/functions/get-alerts/index.ts`, `supabase/schema.sql`
+**Files added:** `supabase/functions/_shared/alert_constants.ts`
+
+### Clarify Scan State in Popup: Stuck-Help + SCANNING/SCANNED Badge — 1:10 AM ET
+Two honesty fixes on the Scanner tab. First: a new "Stuck here?" help block appears on the Scanning empty state, pointing users at the BUY TICKETS → BUY → game workaround for when the seat map page doesn't kick off the API calls the extension needs to start a scan. Subtle purple accent panel under the existing hint, only visible in the Scanning variant of the empty state. Second: the header badge no longer says "LIVE" with a 1.5s pulsing green dot (which falsely implied continuous real-time monitoring). It now flips between **SCANNING** during an active scan and **SCANNED** once the scan status hits `done` or progress reaches 100%, with a static green dot — no animation. State transition reads cleanly: empty-state "Scanning…" → dashboard "SCANNING" badge → "SCANNED" on the final tile. No timer drift, no stale "LIVE" claims while the user is staring at a several-hours-old snapshot.
+
+**Files changed:** `extension/popup.html`, `extension/popup.css`, `extension/popup.js`
+
+### Capture Extra Seat Fields for Preselect Bridge — 1:05 AM ET
+Three more fields added to the per-seat object captured in `background.js` `saveSeats`: `contingentId`, `seatQuality`, and `extent` (the seat polygon's bounding box `[minX, minY, maxX, maxY]`, computed by a new `bboxOf()` helper that walks any nested coordinate array — Point, Polygon, or MultiPolygon). These are the fields the FIFA SPA needs to render a "selected" state when the seat-preselect bridge eventually writes entries into sessionStorage. All three flow through to `scan_snapshots.seats_data` JSONB automatically — no DB schema change, no `ingest-scan` change. The bridge itself remains paused on the blocker of not knowing the live SPA's sessionStorage key yet; this change just gets the data flowing so when the bridge is unblocked, real scan data is already populated in the cloud for testing and field-diffing against hand-picked entries.
+
+**Files changed:** `extension/background.js`
+
+### Salvage Scans on Per-Seat Anomalies — 1:00 AM ET
+Fixed a bug where the `ingest-scan` Edge Function would reject an entire scan (HTTP 400) if any single seat had an out-of-range price, bad `seatId`, or oversized string field. Root cause: the per-seat validation loop at [`index.ts:63-88`](supabase/functions/ingest-scan/index.ts#L63-L88) returned on the first failure instead of skipping the bad seat. New behavior: clamp prices above the Postgres int4 max to `2147483647`, null out sub-$1 or non-numeric prices (the `seats.price` column is already nullable), truncate oversized string fields to 100 chars, and drop seats with bad IDs (primary key — nothing to recover). `MIN_SEAT_COUNT` lowered from 10 to 1 so sold-out matches with only a handful of resale seats still ingest. `MAX_SEAT_COUNT` raised from 15,000 to 50,000 **and** changed from hard-reject to soft-trim — runaway payloads get sliced to the cap with a server-side `console.log` instead of bouncing the whole scan. Top-level structural checks (visitorId format, performanceId format, match name, 50%-same-price anomaly guard) still reject on fail, because those genuinely indicate a broken scan.
+
+Originally diagnosed when David's and his brother-in-law's scans were silently not landing in `scan_snapshots` while everyone else's were. Walked the DevTools service-worker Network tab → saw a 400 on the POST → response body named `"Seat price out of range"` → root caused to a single VIP-tier seat exceeding the previous `MAX_PRICE_MILLICENTS = 100_000_000` (~$100k) cap, which rejected the entire ~10k seat payload. The new cap is the Postgres `int4` column ceiling, not an arbitrary anti-abuse number.
+
+**Files changed:** `supabase/functions/ingest-scan/index.ts`
+
+---
+
 ## April 13, 2026
 
 ### Cloud Restore for Alerts + "Picks Are Final" Warning — 1:00 AM ET
