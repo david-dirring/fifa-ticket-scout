@@ -460,6 +460,24 @@ async function saveAvailability(perfId, body, tabId) {
   await chrome.storage.local.set({ games });
 }
 
+// Bounding box of any nested coordinate array (Point, Polygon, MultiPolygon).
+// Returns [minX, minY, maxX, maxY] or undefined if no numeric pairs found.
+function bboxOf(coords) {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  (function walk(c) {
+    if (!Array.isArray(c) || c.length === 0) return;
+    if (typeof c[0] === "number") {
+      if (c[0] < minX) minX = c[0];
+      if (c[0] > maxX) maxX = c[0];
+      if (c[1] < minY) minY = c[1];
+      if (c[1] > maxY) maxY = c[1];
+      return;
+    }
+    for (const child of c) walk(child);
+  })(coords);
+  return isFinite(minX) ? [minX, minY, maxX, maxY] : undefined;
+}
+
 async function saveSeats(perfId, features, tabId) {
   const data = await getStorage();
   const games = data.games || {};
@@ -493,6 +511,9 @@ async function saveSeats(perfId, features, tabId) {
       tariffId: p.tariffId ?? p.tariff?.id,
       advantageId: p.advantageId ?? p.advantage?.id,
       movementId: p.movementId ?? p.resaleMovementId,
+      contingentId: p.contingentId,
+      seatQuality: p.seatQuality,
+      extent: bboxOf(f.geometry?.coordinates),
     };
   }
 
