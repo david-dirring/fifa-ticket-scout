@@ -61,7 +61,7 @@ When you open a match, the extension scans all map sections automatically so you
 Open multiple matches in different tabs and track them all simultaneously. Free users can view one match at a time. (Pro and above.)
 
 ★ Price Drop Alerts (Pro + Web + Alerts)
-Pick up to 3 World Cup matches and get emailed the moment resale prices cross your threshold. Three targeting modes — % vs face value, $ vs face value, or absolute $ — plus category filter (Any / CAT 1 / CAT 2 / CAT 3) and number of seats needed. Picks are cloud-backed so they survive reinstalls, profile switches, and new machines. A per-match 24-hour cooldown keeps your inbox quiet, with re-fires only on meaningful price drops.
+Pick up to 3 World Cup matches and get emailed resale prices that cross your threshold. Three targeting modes — % vs face value, $ vs face value, or absolute $ — plus category filter (Any / CAT 1 / CAT 2 / CAT 3) and number of seats needed. Picks are cloud-backed so they survive reinstalls, profile switches, and new machines.
 
 ★ Smart Filtering
 Seats currently in another buyer's cart are automatically hidden so you only see what's actually available. No phantom listings cluttering your results.
@@ -73,7 +73,8 @@ Every scan contributes anonymously to a shared database so the community benefit
 
 FREE VS PRO
 
-The extension is fully functional for free. Paid tiers unlock extra scan speeds, multi-tab support, and — at the top tier — price drop email alerts.
+The extension is fully functional for free. 98% of users are FREE users.
+Paid tiers unlock extra scan speeds, multi-tab support, and — at the top tier — price drop email alerts.
 
 • Free — Full dashboard, auto-scan at Balanced speed, category filters, histograms, best deals, CSV export, and contributing to crowdsourced data. Everything you need to find good seats for one match at a time.
 
@@ -83,27 +84,25 @@ The extension is fully functional for free. Paid tiers unlock extra scan speeds,
 
 • Pro + Web + Alerts — Everything in Pro + Web, plus the Alerts tab: price drop email alerts for up to 3 matches with customizable thresholds and filters.
 
-Get a license key at: https://daviddirring.gumroad.com/
+Get a license key at: https://fifaticketscout.com/#pricing
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 PRIVACY & SECURITY
 
-• All scan data is stored locally in your browser
-• Scan results are synced anonymously — no personal information collected
+• Scan results are synced anonymously — no personal information collected, have your AI of choice examine the codebase
 • Each install gets a random anonymous ID (not tied to any identity)
 • License key verification goes through Gumroad's API only
-• No analytics, no tracking
-• The extension only runs on official FIFA resale ticket sites (all currencies: USD, CAD, EUR, etc.)
-• Open source: https://github.com/david-dirring/fifa-ticket-scout
+• The extension only runs on official FIFA resale ticket sites
+• Open source: https://github.com/david-dirring/fifa-ticket-scout <-- this is a key differentiator from any copycats out there. I am good with copy cats too, but would like their solution to also be open source.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-WHO THIS IS FOR
+WHO THIS IS GOOD FOR
 
-• Fans trying to find the best available seats for a specific match
-• Groups looking for multiple seats together at a good price
-• Anyone who wants to compare prices across the entire stadium without clicking through every section manually
+• Fans trying to find the best available seats for a specific match (buyers)
+• Groups looking for multiple seats together at a good price (buyers)
+• Anyone who wants to compare prices across the entire stadium without clicking through every section manually (recreational sellers)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -113,6 +112,8 @@ Built with zero external dependencies. Pure JavaScript, no frameworks, no bloat.
 
 Questions or feedback? Open an issue on GitHub:
 https://github.com/david-dirring/fifa-ticket-scout/issues
+
+If you are feeling generous, feel free to buy me some coffee here at http://buymeacoffee.com/davidrd
 ```
 
 ## Category
