@@ -1383,11 +1383,11 @@ body {
   border-bottom: 1px solid var(--border);
   overflow-x: auto;
   scrollbar-width: none;
+  cursor: grab;
+  -webkit-overflow-scrolling: touch;
 }
-
-.cat-tabs::-webkit-scrollbar {
-  display: none;
-}
+.cat-tabs::-webkit-scrollbar { display: none; }
+.cat-tabs.grabbing { cursor: grabbing; user-select: none; }
 
 .cat-tab {
   display: inline-flex;

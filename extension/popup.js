@@ -591,6 +591,30 @@ function renderCategorySections(seats) {
 
   // Attach pagination handler
   attachClusterPagination(filteredClusters);
+
+  // Drag-to-scroll on category tabs
+  initCatTabsDrag();
+}
+
+function initCatTabsDrag() {
+  const el = document.getElementById("catTabs");
+  if (!el || el.dataset.dragInit) return;
+  el.dataset.dragInit = "1";
+  let isDown = false, startX, scrollLeft, moved;
+  el.addEventListener("mousedown", (e) => {
+    isDown = true; moved = false;
+    el.classList.add("grabbing");
+    startX = e.pageX - el.offsetLeft;
+    scrollLeft = el.scrollLeft;
+  });
+  el.addEventListener("mouseleave", () => { isDown = false; el.classList.remove("grabbing"); });
+  el.addEventListener("mouseup", () => { isDown = false; el.classList.remove("grabbing"); });
+  el.addEventListener("mousemove", (e) => {
+    if (!isDown) return;
+    e.preventDefault();
+    moved = true;
+    el.scrollLeft = scrollLeft - (e.pageX - el.offsetLeft - startX);
+  });
 }
 
 function buildDistribution(prices, color) {

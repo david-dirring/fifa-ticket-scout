@@ -261,7 +261,7 @@
 
     // Retry pass — wait a few seconds then retry blocked tiles
     if (blockedTiles.length > 0 && !aborted) {
-      console.log("[FIFA Ticket Scout] Retrying", blockedTiles.length, "blocked tiles in 3s...");
+      console.log("[FIFA Ticket Scout] Retrying", blockedTiles.length, "blocked tiles in", Math.round(retryCooldown / 1000) + "s...");
       await new Promise((r) => setTimeout(r, retryCooldown));
       consecutiveBlocks = 0;
       completed = totalTiles - blockedTiles.length;
@@ -271,7 +271,17 @@
       }
     }
 
-    if (abortReason !== "captcha") {
+    // Always send a terminal status — either "done" or "captcha"
+    if (abortReason === "captcha") {
+      // captcha status already sent inside scanTiles, but ensure progress shows 100%
+      window.postMessage({
+        type: "FIFA_TICKET_SCOUT_SCAN_PROGRESS",
+        performanceId,
+        completed: totalTiles,
+        total: totalTiles,
+        status: "captcha",
+      }, "*");
+    } else {
       window.postMessage({
         type: "FIFA_TICKET_SCOUT_SCAN_PROGRESS",
         performanceId,
@@ -280,6 +290,6 @@
         status: "done",
       }, "*");
     }
-    console.log("[FIFA Ticket Scout] Scan", aborted ? "aborted (" + (abortReason || "failures") + ")" : "complete", ":", foundSeats, "seats found");
+    console.log("[FIFA Ticket Scout] Scan", aborted ? "aborted (" + (abortReason || "early stop") + ")" : "complete", ":", foundSeats, "seats found");
   });
 })();
