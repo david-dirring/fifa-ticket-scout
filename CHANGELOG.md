@@ -6,6 +6,17 @@ All notable changes to FIFA Ticket Scout are documented here. Timestamps are in 
 
 ## April 17, 2026
 
+### Remote Scan Config — DB-Controlled Timing Profiles
+
+Scan timing constants (jitter delays, retry cooldowns, consecutive-block thresholds, speed profiles) are no longer hardcoded in `injected.js`. They now live in a `scan_config` Supabase table and are fetched on extension startup + every 60 minutes via `chrome.alarms`. The extension falls back to hardcoded defaults if the fetch fails (offline resilience).
+
+Also corrected the speed profile ordering — "cautious" was previously faster than "balanced" (500-900ms vs 900-1500ms). New corrected values: aggressive (0-0ms), balanced (600-1000ms), cautious (1200-1800ms), stealth (1300-2700ms).
+
+To tune live: `UPDATE scan_config SET profiles = jsonb_set(profiles, '{balanced}', '{"min":500,"max":800}') WHERE id = 1;` via Supabase SQL editor. No extension update needed.
+
+**Files changed:** `extension/background.js`, `extension/content.js`, `extension/injected.js`, `supabase/schema.sql`
+**Files added:** `supabase/migrate_scan_config.sql`
+
 ### LMS (Last Minute Sales) Site Support — v2.2.0
 
 Added full support for FIFA's Last Minute Sales site (`fwc26-shop-usd.tickets.fifa.com`), where FIFA drops face-value tickets. The extension now works on both the resale and LMS sites with the same scan, display, and sync pipeline.
