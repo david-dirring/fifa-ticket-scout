@@ -4,6 +4,7 @@
 -- Scan audit log: one row per scan submission, with full seat data as JSONB
 CREATE TABLE scan_snapshots (
   id              uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  site            text NOT NULL DEFAULT 'resale' CHECK (site IN ('resale','lms')),
   performance_id  text NOT NULL,
   visitor_id      text NOT NULL,
   license_hash    text,
@@ -15,14 +16,15 @@ CREATE TABLE scan_snapshots (
   scanned_at      timestamptz DEFAULT now()
 );
 
-CREATE INDEX idx_snapshots_perf ON scan_snapshots (performance_id);
+CREATE INDEX idx_snapshots_site_perf ON scan_snapshots (site, performance_id);
 CREATE INDEX idx_snapshots_time ON scan_snapshots (scanned_at DESC);
 CREATE INDEX idx_snapshots_visitor ON scan_snapshots (visitor_id);
-CREATE INDEX idx_snapshots_perf_time ON scan_snapshots (performance_id, scanned_at DESC);
+CREATE INDEX idx_snapshots_site_perf_time ON scan_snapshots (site, performance_id, scanned_at DESC);
 CREATE INDEX idx_snapshots_visitor_time ON scan_snapshots (visitor_id, scanned_at DESC);
 
 -- Latest state per seat, upserted on each scan
 CREATE TABLE seats (
+  site            text NOT NULL DEFAULT 'resale' CHECK (site IN ('resale','lms')),
   performance_id  text NOT NULL,
   seat_id         text NOT NULL,
   block           text,
@@ -37,14 +39,15 @@ CREATE TABLE seats (
   last_seen_at    timestamptz DEFAULT now(),
   first_seen_at   timestamptz DEFAULT now(),
 
-  PRIMARY KEY (performance_id, seat_id)
+  PRIMARY KEY (site, performance_id, seat_id)
 );
 
-CREATE INDEX idx_seats_perf_price ON seats (performance_id, price);
+CREATE INDEX idx_seats_site_perf_price ON seats (site, performance_id, price);
 
 -- Current aggregated stats per match (one row per match, overwritten)
 CREATE TABLE match_summary (
-  performance_id  text PRIMARY KEY,
+  site            text NOT NULL DEFAULT 'resale' CHECK (site IN ('resale','lms')),
+  performance_id  text NOT NULL,
   match_name      text,
   match_date      text,
   currency        text DEFAULT 'USD',
@@ -58,7 +61,9 @@ CREATE TABLE match_summary (
   last_scan_at    timestamptz,
   scan_count      int DEFAULT 0,
   unique_scanners int DEFAULT 0,
-  updated_at      timestamptz DEFAULT now()
+  updated_at      timestamptz DEFAULT now(),
+
+  PRIMARY KEY (site, performance_id)
 );
 
 -- Alert configurations for Pro + Web + Alerts users
@@ -110,6 +115,7 @@ CREATE INDEX idx_alerts_sent_dedup ON alerts_sent (license_hash, match_number, f
 -- Hourly snapshots for trend charts (append-only, one row per match per hour)
 CREATE TABLE match_summary_history (
   id              uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  site            text NOT NULL DEFAULT 'resale' CHECK (site IN ('resale','lms')),
   performance_id  text NOT NULL,
   total_seats     int DEFAULT 0,
   available_seats int DEFAULT 0,
@@ -120,7 +126,7 @@ CREATE TABLE match_summary_history (
   created_at      timestamptz DEFAULT now()
 );
 
-CREATE INDEX idx_summary_history_perf ON match_summary_history (performance_id, hour DESC);
+CREATE UNIQUE INDEX uq_msh_site_perf_hour ON match_summary_history (site, performance_id, hour);
 
 -- Row Level Security
 

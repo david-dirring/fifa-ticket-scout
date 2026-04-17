@@ -1,5 +1,15 @@
 // Background service worker — processes API data and stores it
 
+// --- Site discrimination ---
+function siteFromUrl(url) {
+  try {
+    const h = new URL(url).hostname;
+    if (h.includes("-resale-")) return "resale";
+    if (h.includes("-shop-"))   return "lms";
+  } catch {}
+  return "unknown";
+}
+
 // --- Tier / License constants ---
 const TIERS = { FREE: 0, PRO: 10, PRO_WEB: 20, PRO_WEB_ALERTS: 30 };
 const REVERIFY_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -57,18 +67,22 @@ async function getOrCreateVisitorId() {
   return visitorId;
 }
 
-function syncToSupabase(performanceId, durationMs) {
+function syncToSupabase(gameKey, durationMs) {
   getStorage().then(async (data) => {
-    const game = data.games?.[performanceId];
-    if (!game?.seats || Object.keys(game.seats).length === 0) return;
+    const game = data.games?.[gameKey];
+    if (!game) return;
+    // Allow LMS zero-seat scans to sync (records "we checked, nothing there")
+    if (Object.keys(game.seats || {}).length === 0 && game.site !== "lms") return;
 
     const visitorId = await getOrCreateVisitorId();
     const license = data.license;
     const licenseHash = license?.key ? await sha256(license.key) : null;
 
+    const performanceId = game.match?.performanceId || gameKey.split(":").pop();
     const payload = {
       visitorId,
       licenseHash,
+      site: game.site || "resale",
       performanceId,
       match: game.match || {},
       seats: game.seats,
@@ -190,6 +204,20 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 getStorage().then((data) => {
   if (data.license && Date.now() - data.license.verifiedAt > REVERIFY_INTERVAL_MS) {
     reverifyLicense();
+  }
+  // One-shot migration: rewrite bare perfId keys → resale:perfId
+  const games = data.games;
+  if (games) {
+    let changed = false;
+    for (const key of Object.keys(games)) {
+      if (!key.includes(":")) {
+        games[key].site = "resale";
+        games[`resale:${key}`] = games[key];
+        delete games[key];
+        changed = true;
+      }
+    }
+    if (changed) chrome.storage.local.set({ games });
   }
 });
 
@@ -320,11 +348,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "START_SCAN") {
     // Clear existing seats for this game so the scan gives a fresh snapshot
     const perfId = message.performanceId;
+    const site = message.site || "resale";
+    const gameKey = `${site}:${perfId}`;
     if (perfId) {
       getStorage().then((data) => {
         const games = data.games || {};
-        if (games[perfId]) {
-          games[perfId].seats = {};
+        if (games[gameKey]) {
+          games[gameKey].seats = {};
           chrome.storage.local.set({ games }, () => {
             notifyDataUpdated();
           });
@@ -334,12 +364,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     sendScanToTab(message.productId, message.performanceId, tabId);
   }
   if (message.type === "SCAN_PROGRESS") {
-    // Track scan timing
-    if (message.completed === 0 && message.status === "scanning") {
-      scanStartTimes[message.performanceId] = Date.now();
-    }
-
-    // Forward progress to popup
+    // Forward progress to popup immediately (non-blocking)
     chrome.runtime.sendMessage({
       type: "SCAN_PROGRESS",
       performanceId: message.performanceId,
@@ -349,31 +374,59 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       eta: message.eta,
     }).catch(() => {});
 
-    // Sync to Supabase when scan completes
-    if (message.status === "done") {
-      const startTime = scanStartTimes[message.performanceId];
-      const durationMs = startTime ? Date.now() - startTime : null;
-      delete scanStartTimes[message.performanceId];
-      syncToSupabase(message.performanceId, durationMs);
-    }
+    // Resolve gameKey — may need async storage lookup
+    const resolveGameKey = () => {
+      const cached = tabId ? tabGameMap[tabId] : null;
+      if (cached) return Promise.resolve(cached);
+      if (!message.performanceId) return Promise.resolve(null);
+      // Fallback: check storage for which site has this perfId
+      return getStorage().then((data) => {
+        const games = data.games || {};
+        const lmsKey = `lms:${message.performanceId}`;
+        const resaleKey = `resale:${message.performanceId}`;
+        const resolved = games[lmsKey] ? lmsKey : games[resaleKey] ? resaleKey : null;
+        if (resolved && tabId) tabGameMap[tabId] = resolved;
+        return resolved;
+      });
+    };
+
+    resolveGameKey().then((gameKey) => {
+      if (!gameKey) return;
+
+      // Track scan timing
+      if (message.completed === 0 && message.status === "scanning") {
+        scanStartTimes[gameKey] = Date.now();
+      }
+
+      // Sync to Supabase when scan completes
+      if (message.status === "done") {
+        const startTime = scanStartTimes[gameKey];
+        const durationMs = startTime ? Date.now() - startTime : null;
+        delete scanStartTimes[gameKey];
+        syncToSupabase(gameKey, durationMs);
+      }
+    });
   }
 });
 
 async function processApiResponse(url, body, tabId) {
   if (!body) return;
 
+  const site = siteFromUrl(url);
+
   // Match info
   if (url.includes("google-ecommerce-detail") && body.ecommerceViewProduct) {
-    await enforceGameLimit(String(body.ecommerceViewProduct.performanceId));
-    await saveMatchInfo(body.ecommerceViewProduct, tabId);
+    const perfId = String(body.ecommerceViewProduct.performanceId);
+    await enforceGameLimit(`${site}:${perfId}`);
+    await saveMatchInfo(body.ecommerceViewProduct, tabId, site);
   }
 
   // Availability / price ranges
   if (url.includes("seatmap/availability") && body.priceRangeCategories) {
     const perfId = extractParam(url, "perfId");
     if (perfId) {
-      await enforceGameLimit(perfId);
-      await saveAvailability(perfId, body, tabId);
+      await enforceGameLimit(`${site}:${perfId}`);
+      await saveAvailability(perfId, body, tabId, site);
     }
   }
 
@@ -382,10 +435,10 @@ async function processApiResponse(url, body, tabId) {
     const perfId = extractParam(url, "performanceId");
     const prodId = extractParam(url, "productId");
     if (perfId) {
-      await enforceGameLimit(perfId);
-      await saveSeats(perfId, body.features, tabId);
+      await enforceGameLimit(`${site}:${perfId}`);
+      await saveSeats(perfId, body.features, tabId, site);
       if (prodId) {
-        await saveProductId(perfId, prodId);
+        await saveProductId(perfId, prodId, site);
       }
     }
   }
@@ -395,9 +448,9 @@ async function processApiResponse(url, body, tabId) {
     const perfId = extractParam(url, "performanceId");
     const prodId = extractParam(url, "productId");
     if (perfId && prodId) {
-      await enforceGameLimit(perfId);
-      await saveProductId(perfId, prodId);
-      autoScan(perfId, prodId, tabId);
+      await enforceGameLimit(`${site}:${perfId}`);
+      await saveProductId(perfId, prodId, site);
+      autoScan(perfId, prodId, tabId, site);
     }
   }
 
@@ -414,14 +467,16 @@ function extractParam(url, param) {
   }
 }
 
-async function saveMatchInfo(product, tabId) {
+async function saveMatchInfo(product, tabId, site) {
   const perfId = String(product.performanceId);
+  const gameKey = `${site}:${perfId}`;
   const data = await getStorage();
   const games = data.games || {};
 
-  if (!games[perfId]) games[perfId] = emptyGame();
+  if (!games[gameKey]) games[gameKey] = emptyGame();
 
-  games[perfId].match = {
+  games[gameKey].site = site;
+  games[gameKey].match = {
     name: product.name,
     date: product.date,
     currency: product.currency,
@@ -429,19 +484,21 @@ async function saveMatchInfo(product, tabId) {
     imgUrl: product.imgUrl,
   };
 
-  if (tabId) tabGameMap[tabId] = perfId;
+  if (tabId) tabGameMap[tabId] = gameKey;
   await chrome.storage.local.set({ games });
 }
 
-async function saveAvailability(perfId, body, tabId) {
+async function saveAvailability(perfId, body, tabId, site) {
+  const gameKey = `${site}:${perfId}`;
   const data = await getStorage();
   const games = data.games || {};
 
-  if (!games[perfId]) {
-    games[perfId] = emptyGame();
+  if (!games[gameKey]) {
+    games[gameKey] = emptyGame();
   }
 
-  games[perfId].availability = {
+  games[gameKey].site = site;
+  games[gameKey].availability = {
     categories: body.priceRangeCategories.map((c) => ({
       id: c.id,
       name: c.name?.en || "Unknown",
@@ -456,7 +513,19 @@ async function saveAvailability(perfId, body, tabId) {
     lastUpdated: body.seatMapPriceRanges?.lastUpdated || null,
   };
 
-  if (tabId) tabGameMap[tabId] = perfId;
+  // Backfill seat prices from category prices (handles seats arriving before availability)
+  const seats = games[gameKey].seats || {};
+  const catPrices = {};
+  for (const c of games[gameKey].availability.categories) {
+    catPrices[c.id] = c.minPrice;
+  }
+  for (const s of Object.values(seats)) {
+    if (s.price == null && s.categoryId && catPrices[s.categoryId]) {
+      s.price = catPrices[s.categoryId];
+    }
+  }
+
+  if (tabId) tabGameMap[tabId] = gameKey;
   await chrome.storage.local.set({ games });
 }
 
@@ -478,21 +547,35 @@ function bboxOf(coords) {
   return isFinite(minX) ? [minX, minY, maxX, maxY] : undefined;
 }
 
-async function saveSeats(perfId, features, tabId) {
+async function saveSeats(perfId, features, tabId, site) {
+  const gameKey = `${site}:${perfId}`;
   const data = await getStorage();
   const games = data.games || {};
 
-  if (!games[perfId]) {
-    games[perfId] = emptyGame();
+  if (!games[gameKey]) {
+    games[gameKey] = emptyGame();
   }
 
-  const seats = games[perfId].seats || {};
+  games[gameKey].site = site;
+  const seats = games[gameKey].seats || {};
+
+  // Build category price lookup from availability (if already loaded).
+  // LMS seats often lack per-seat pricing — price comes from the category.
+  const catPrices = {};
+  if (games[gameKey].availability?.categories) {
+    for (const c of games[gameKey].availability.categories) {
+      catPrices[c.id] = c.minPrice;
+    }
+  }
 
   for (const f of features) {
     const p = f.properties;
     if (!p) continue;
 
     const seatId = String(p.id);
+    const rawPrice = p.amount != null ? p.amount
+      : p.seatBasedPriceAmount != null ? p.seatBasedPriceAmount
+      : catPrices[p.seatCategoryId] ?? null;
     seats[seatId] = {
       block: p.block?.name?.en || "",
       area: p.area?.name?.en || "",
@@ -500,12 +583,9 @@ async function saveSeats(perfId, features, tabId) {
       seat: p.number || "",
       category: p.seatCategory || "",
       categoryId: p.seatCategoryId,
-      price: p.amount,
+      price: rawPrice,
       color: p.color || "",
       exclusive: p.exclusive || false,
-      // Extra IDs needed by the seat-preselect bridge (content.js) so the
-      // FIFA seat picker can re-render a "selected" state from sessionStorage.
-      // All optional — undefined values are dropped from the JSON automatically.
       blockId: p.block?.id,
       areaId: p.area?.id,
       tariffId: p.tariffId ?? p.tariff?.id,
@@ -514,37 +594,42 @@ async function saveSeats(perfId, features, tabId) {
       contingentId: p.contingentId,
       seatQuality: p.seatQuality,
       extent: bboxOf(f.geometry?.coordinates),
+      ticketType: p.resaleMovementId ? "resale"
+        : (p.seatBasedPriceAmount != null ? "face_value" : "unknown"),
     };
   }
 
-  games[perfId].seats = seats;
-  if (tabId) tabGameMap[tabId] = perfId;
+  games[gameKey].seats = seats;
+  if (tabId) tabGameMap[tabId] = gameKey;
   await chrome.storage.local.set({ games });
 }
 
-async function saveProductId(perfId, productId) {
+async function saveProductId(perfId, productId, site) {
+  const gameKey = `${site}:${perfId}`;
   const data = await getStorage();
   const games = data.games || {};
-  if (!games[perfId]) {
-    games[perfId] = emptyGame();
+  if (!games[gameKey]) {
+    games[gameKey] = emptyGame();
   }
-  games[perfId].productId = productId;
+  games[gameKey].site = site;
+  games[gameKey].productId = productId;
   await chrome.storage.local.set({ games });
 }
 
 // Track which tab+game combos we've already auto-scanned
 const scannedGames = new Set();
 
-function autoScan(performanceId, productId, tabId) {
-  const key = tabId ? `${tabId}:${performanceId}` : performanceId;
+function autoScan(performanceId, productId, tabId, site) {
+  const key = tabId ? `${tabId}:${site}:${performanceId}` : `${site}:${performanceId}`;
   if (scannedGames.has(key)) return;
   scannedGames.add(key);
 
+  const gameKey = `${site}:${performanceId}`;
   // Clear old seats for a fresh snapshot before scanning
   getStorage().then((data) => {
     const games = data.games || {};
-    if (games[performanceId]) {
-      games[performanceId].seats = {};
+    if (games[gameKey]) {
+      games[gameKey].seats = {};
       chrome.storage.local.set({ games }, () => {
         sendScanToTab(productId, performanceId, tabId);
       });
@@ -555,14 +640,14 @@ function autoScan(performanceId, productId, tabId) {
 }
 
 // Free tier: only one game at a time — clear old game when switching
-async function enforceGameLimit(perfId) {
+async function enforceGameLimit(gameKey) {
   const data = await getStorage();
   const level = data.license?.level || 0;
   if (level >= TIERS.PRO) return;
 
   const games = data.games || {};
-  const existingIds = Object.keys(games);
-  if (existingIds.length > 0 && !existingIds.includes(perfId)) {
+  const existingKeys = Object.keys(games);
+  if (existingKeys.length > 0 && !existingKeys.includes(gameKey)) {
     await chrome.storage.local.set({ games: {} });
   }
 }
