@@ -2137,3 +2137,36 @@ body {
   bottom: -1px;
   right: -1px;
 }
+
+/* --- Site badges (LMS / Resale) --- */
+.site-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  vertical-align: middle;
+  margin-left: 6px;
+}
+.site-resale {
+  background: var(--fifa-purple-dim);
+  color: var(--fifa-purple);
+}
+.site-lms {
+  background: var(--green-dim);
+  color: var(--green);
+}
+
+/* LMS empty-state button */
+.btn-lms {
+  margin-top: 8px;
+  background: var(--green-dim);
+  border-color: var(--green);
+  color: var(--green);
+}
+.btn-lms:hover {
+  background: var(--green);
+  color: var(--white);
+}

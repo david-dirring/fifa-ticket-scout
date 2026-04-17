@@ -86,6 +86,15 @@ async function getCurrentTabUrl() {
   } catch { return ""; }
 }
 
+function siteFromUrl(url) {
+  try {
+    const h = new URL(url).hostname;
+    if (h.includes("-shop-")) return "lms";
+    if (h.includes("-resale-")) return "resale";
+  } catch {}
+  return "resale";
+}
+
 function loadData() {
   getCurrentTabUrl().then((url) => {
     const isFifaSite = /\.tickets\.fifa\.com/.test(url);
@@ -98,19 +107,33 @@ function loadData() {
       }
 
       const games = data.games;
-      const gameIds = Object.keys(games);
+      const gameKeys = Object.keys(games);
 
-      if (gameIds.length === 0) {
+      if (gameKeys.length === 0) {
         showEmpty(isFifaSite, isSeatMap);
         return;
       }
 
-      // Match game to active tab's perfId, fallback to first game
-      // Match perfId from query string (?perfId=123) or path (/performance/123/)
+      // Detect site + perfId from the active tab URL
+      const tabSite = siteFromUrl(url);
       const perfIdMatch = url.match(/perfId=(\d+)/) || url.match(/\/performance\/(\d+)/);
       const tabPerfId = perfIdMatch ? perfIdMatch[1] : null;
-      const activeId = (tabPerfId && games[tabPerfId]) ? tabPerfId : gameIds[0];
-      const game = games[activeId];
+
+      // Try compound key matching: preferred site first, then other site, then first cached
+      let activeKey = null;
+      if (tabPerfId) {
+        const preferred = `${tabSite}:${tabPerfId}`;
+        const other = `${tabSite === "lms" ? "resale" : "lms"}:${tabPerfId}`;
+        if (games[preferred]) activeKey = preferred;
+        else if (games[other]) activeKey = other;
+      }
+      // Backward-compat: try bare perfId (pre-migration)
+      if (!activeKey && tabPerfId && games[tabPerfId]) {
+        activeKey = tabPerfId;
+      }
+      if (!activeKey) activeKey = gameKeys[0];
+
+      const game = games[activeKey];
 
       if (!game || Object.keys(game.seats || {}).length === 0) {
         showEmpty(isFifaSite, isSeatMap);
@@ -123,7 +146,8 @@ function loadData() {
         selectedTogether = new Set(data.filters.selectedTogether ?? [1, 2, 3, 4, 5, 6]);
       }
 
-      currentPerfId = activeId;
+      currentPerfId = activeKey;
+      currentSite = game.site || "resale";
       renderDashboard(game);
     });
   });
@@ -151,13 +175,22 @@ function showEmpty(isFifaSite, isSeatMap) {
     scanningHelp.style.display = "none";
   } else {
     title.textContent = "FIFA Ticket Scout";
-    hint.textContent = "Open the FIFA resale ticket site and browse a seat map to start capturing prices.";
-    action.textContent = "Open FIFA Resale Site";
+    hint.textContent = "Open the FIFA resale or LMS ticket site and browse a seat map to start capturing prices.";
+    action.textContent = "Open Resale Site";
     action.style.display = "";
     action.onclick = (e) => {
       e.preventDefault();
       chrome.tabs.create({ url: "https://fwc26-resale-usd.tickets.fifa.com" });
     };
+    // Show LMS button
+    const lmsBtn = document.getElementById("emptyActionLms");
+    if (lmsBtn) {
+      lmsBtn.style.display = "";
+      lmsBtn.onclick = (e) => {
+        e.preventDefault();
+        chrome.tabs.create({ url: "https://fwc26-shop-usd.tickets.fifa.com" });
+      };
+    }
     scanningHelp.style.display = "none";
   }
 }
@@ -217,9 +250,10 @@ function renderMatchInfo(match) {
     const venue = parts[3] || "";
     const date = match.date ? formatDate(match.date) : "";
 
+    const siteBadge = `<span class="site-badge site-${currentSite}">${currentSite === "lms" ? "LMS" : "Resale"}</span>`;
     el.innerHTML = `
       <div class="match-top-row">
-        <div class="match-teams">${escapeHtml(teams)}</div>
+        <div class="match-teams">${escapeHtml(teams)} ${siteBadge}</div>
         ${scanSpeedHtml()}
       </div>
       <div class="match-meta">
@@ -247,6 +281,7 @@ let lastPillPct = 0;
 let scanStartTime = 0;
 let scanElapsed = 0;
 let currentPerfId = null;
+let currentSite = "resale";
 
 function formatElapsed(ms) {
   const s = Math.round(ms / 1000);
@@ -559,23 +594,43 @@ function renderCategorySections(seats) {
 }
 
 function buildDistribution(prices, color) {
-  if (prices.length < 2) return "";
+  const isLms = currentSite === "lms";
+  if (prices.length < (isLms ? 1 : 2)) return "";
 
   const sorted = prices.slice().sort((a, b) => a - b);
   const totalSeats = sorted.length;
 
-  // Bottom 80% get individual buckets, top 20% lumped together
-  const cutoffIndex = Math.floor(totalSeats * 0.8);
+  // LMS: show full distribution (face-value, no outliers to trim)
+  // Resale: bottom 80% get individual buckets, top 20% lumped together
+  const useTail = !isLms;
+  const cutoffIndex = useTail ? Math.floor(totalSeats * 0.8) : totalSeats;
   const mainPrices = sorted.slice(0, cutoffIndex);
   const tailPrices = sorted.slice(cutoffIndex);
 
-  if (mainPrices.length < 2) return "";
+  if (mainPrices.length < (isLms ? 1 : 2)) return "";
 
   const mainMin = mainPrices[0];
   const mainMax = mainPrices[mainPrices.length - 1];
   const mainRange = mainMax - mainMin;
 
-  if (mainRange === 0) return "";
+  // LMS: single-price categories get one bar with empty flanking buckets; resale needs a range
+  if (mainRange === 0 && !isLms) return "";
+  if (mainRange === 0) {
+    const lo = mainMin - 250;
+    const hi = mainMin + 250;
+    const emptyBar = `<div class="hist-bar" title="$${formatPrice(lo < 0 ? 0 : lo)}: 0 seats" style="height:1px;background:${color};opacity:0.08;"></div>`;
+    const fullBar = `<div class="hist-bar" title="$${formatPrice(mainMin)}: ${totalSeats} seat${totalSeats !== 1 ? "s" : ""}" style="height:100%;background:${color};opacity:0.8;"></div>`;
+    const emptyBar2 = `<div class="hist-bar" title="$${formatPrice(hi)}: 0 seats" style="height:1px;background:${color};opacity:0.08;"></div>`;
+    return `
+    <div class="distribution">
+      <div class="hist-chart">${emptyBar}${fullBar}${emptyBar2}</div>
+      <div class="hist-labels">
+        <span>$${formatPrice(lo < 0 ? 0 : lo)}</span>
+        <span class="hist-total">${totalSeats} seats</span>
+        <span>$${formatPrice(hi)}</span>
+      </div>
+    </div>`;
+  }
 
   // Target ~20 bars for the main section, round bucket size to a clean number
   let rawBucketSize = mainRange / 20;
@@ -585,7 +640,8 @@ function buildDistribution(prices, color) {
 
   const bucketStart = Math.floor(mainMin / bucketSize) * bucketSize;
   const mainBucketCount = Math.ceil((mainMax - bucketStart) / bucketSize) + 1;
-  const totalBuckets = mainBucketCount + 1; // +1 for the tail bucket
+  const hasTail = tailPrices.length > 0;
+  const totalBuckets = mainBucketCount + (hasTail ? 1 : 0);
   const buckets = new Array(totalBuckets).fill(0);
 
   for (const p of mainPrices) {
@@ -594,7 +650,7 @@ function buildDistribution(prices, color) {
     if (idx >= mainBucketCount) idx = mainBucketCount - 1;
     buckets[idx]++;
   }
-  buckets[totalBuckets - 1] = tailPrices.length;
+  if (hasTail) buckets[totalBuckets - 1] = tailPrices.length;
 
   const maxBucket = Math.max(...buckets);
   const tailMin = tailPrices.length > 0 ? tailPrices[0] : 0;
@@ -602,7 +658,7 @@ function buildDistribution(prices, color) {
 
   const bars = buckets
     .map((count, i) => {
-      const isTail = i === totalBuckets - 1;
+      const isTail = hasTail && i === totalBuckets - 1;
       let label;
       if (isTail) {
         label = `$${formatPrice(tailMin)}-$${formatPrice(tailMax)}: ${count} seat${count !== 1 ? "s" : ""} (top 20%)`;
@@ -626,7 +682,7 @@ function buildDistribution(prices, color) {
       <div class="hist-labels">
         <span>$${formatPrice(bucketStart)}</span>
         <span class="hist-total">${totalSeats} seats &middot; $${formatPrice(bucketSize)} bars</span>
-        <span>top 20%</span>
+        ${hasTail ? `<span>top 20%</span>` : `<span>$${formatPrice(mainPrices[mainPrices.length - 1])}</span>`}
       </div>
     </div>
   `;
@@ -635,7 +691,12 @@ function buildDistribution(prices, color) {
 function seatKey(s) { return s.seat + "_" + s.block + "_" + s.row; }
 
 function buildAllClusters(seats) {
-  const sorted = seats.slice().sort((a, b) => a.price - b.price);
+  const sorted = seats.slice().sort((a, b) =>
+    a.price - b.price
+    || a.block.localeCompare(b.block, undefined, { numeric: true })
+    || a.row.localeCompare(b.row, undefined, { numeric: true })
+    || a.seat.localeCompare(b.seat, undefined, { numeric: true })
+  );
   const clusters = [];
   const used = new Set();
 
@@ -800,14 +861,20 @@ function exportCSV() {
       `# Match: ${match?.name || "Unknown"}`,
       `# Date: ${match?.date || "Unknown"}`,
       `# Currency: ${match?.currency || "USD"}`,
-      `# Performance ID: ${activeId}`,
+      `# Site: ${game.site || "resale"}`,
+      `# Performance ID: ${game.match?.performanceId || activeId}`,
       `# Exported: ${exportTime}`,
       `# Total Seats: ${seats.length}`,
     ];
 
     const header = "Block,Area,Row,Seat,Category,Price_USD,Exclusive";
     const rows = seats
-      .sort((a, b) => a.price - b.price)
+      .sort((a, b) =>
+        a.price - b.price
+        || a.block.localeCompare(b.block, undefined, { numeric: true })
+        || a.row.localeCompare(b.row, undefined, { numeric: true })
+        || a.seat.localeCompare(b.seat, undefined, { numeric: true })
+      )
       .map((s) => {
         const area = s.area.includes(",") ? `"${s.area}"` : s.area;
         return `${s.block},${area},${s.row},${s.seat},${s.category},${centsToUSD(s.price).toFixed(2)},${s.exclusive}`;
@@ -857,8 +924,8 @@ function compareVersions(a, b) {
 
 // --- Utilities ---
 
-const FEE_MULTIPLIER = 1.15;
-function centsToUSD(cents) { return cents / 1000 * FEE_MULTIPLIER; }
+const FEE_MULTIPLIER_BY_SITE = { resale: 1.15, lms: 1.0 };
+function centsToUSD(cents) { return cents / 1000 * (FEE_MULTIPLIER_BY_SITE[currentSite] ?? 1.15); }
 
 function formatPrice(n) {
   if (n >= 1000) {
@@ -1822,6 +1889,7 @@ function startScan() {
   getCurrentTabUrl().then((url) => {
     const perfIdMatch = url.match(/perfId=(\d+)/);
     const tabPerfId = perfIdMatch ? perfIdMatch[1] : null;
+    const tabSite = siteFromUrl(url);
 
     chrome.storage.local.get(null, (data) => {
       if (!data?.games) {
@@ -1829,8 +1897,14 @@ function startScan() {
         return;
       }
 
-      const gameIds = Object.keys(data.games);
-      const activeId = (tabPerfId && data.games[tabPerfId]) ? tabPerfId : gameIds[0];
+      const gameKeys = Object.keys(data.games);
+      let activeId = null;
+      if (tabPerfId) {
+        const preferred = `${tabSite}:${tabPerfId}`;
+        if (data.games[preferred]) activeId = preferred;
+        else if (data.games[tabPerfId]) activeId = tabPerfId; // legacy
+      }
+      if (!activeId) activeId = gameKeys[0];
       const game = data.games[activeId];
 
       if (!game?.productId || !activeId) {
@@ -1856,7 +1930,8 @@ function startScan() {
 
 function updateScanProgress(perfId, completed, total, status, eta) {
   // Only update progress for the currently displayed game
-  if (perfId && currentPerfId && perfId !== currentPerfId) return;
+  // currentPerfId is now a compound key (site:perfId), so compare the perfId suffix
+  if (perfId && currentPerfId && !currentPerfId.endsWith(perfId)) return;
   const pct = Math.round((completed / total) * 100);
   document.getElementById("progressFill").style.width = pct + "%";
 
