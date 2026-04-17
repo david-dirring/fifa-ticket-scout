@@ -4,6 +4,31 @@ All notable changes to FIFA Ticket Scout are documented here. Timestamps are in 
 
 ---
 
+## April 17, 2026
+
+### LMS (Last Minute Sales) Site Support — v2.2.0
+
+Added full support for FIFA's Last Minute Sales site (`fwc26-shop-usd.tickets.fifa.com`), where FIFA drops face-value tickets. The extension now works on both the resale and LMS sites with the same scan, display, and sync pipeline.
+
+**How it works:** Site is derived from the hostname (`-shop-` = LMS, `-resale-` = resale) when API responses arrive in `background.js`. All game storage uses a compound `site:performanceId` key so LMS and resale data for the same match coexist without collision. LMS and resale share the same `performanceId` for a given match, so compound keys are mandatory.
+
+**Pricing:** Resale seats carry per-seat `amount` (formula: `÷1000 × 1.15`). LMS seats get their price from `seatBasedPriceAmount` (premium/front-row overrides) or from the category-level pricing in the availability endpoint (formula: `÷1000`, no markup — face value). `saveAvailability` backfills any seats that arrived before category data was available.
+
+**Popup:** Site badge (green "LMS" / purple "Resale") next to match name. `centsToUSD` is site-aware (1.15× resale, 1.0× LMS). Empty state shows buttons for both sites. Histogram shows full distribution for LMS (no top-20% tail cutoff) with single-price categories rendered as one bar flanked by empty buckets. Sort tiebreaker added: block → row → seat when prices are equal. CSV export includes `Site` in metadata.
+
+**Database:** `site` column added to `scan_snapshots`, `seats`, `match_summary`, `match_summary_history`. Primary keys on `seats` and `match_summary` changed to compound `(site, performance_id, ...)`. Migration file: `supabase/migrate_add_site.sql`. Existing rows defaulted to `'resale'`.
+
+**Ingest:** `ingest-scan` accepts `site` in payload, scopes all deletes and stats recomputes by `(site, performance_id)`. Zero-seat LMS scans log a snapshot row with `seat_count=0`. Suspicious price distribution check skipped for LMS (face-value tickets legitimately share prices).
+
+**Alerts:** Site-agnostic by design. `alert_configs` stores `performance_id` + threshold with no site field — the future dispatcher queries by `performance_id` without site filter, covering both sites.
+
+**Startup migration:** On service worker boot, legacy bare-perfId game keys are rewritten to `resale:perfId` with `site='resale'` stamped.
+
+**Files changed:** `extension/background.js`, `extension/popup.js`, `extension/popup.html`, `extension/popup.css`, `supabase/schema.sql`, `supabase/functions/ingest-scan/index.ts`
+**Files added:** `supabase/migrate_add_site.sql`
+
+---
+
 ## April 14, 2026
 
 ### Alerts Fix: Per-Pick Locking + Centralized MAX_PICKS + 180-Day TTL — 2:30 AM ET
