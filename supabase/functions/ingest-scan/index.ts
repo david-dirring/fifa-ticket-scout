@@ -29,7 +29,8 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { visitorId, licenseHash, performanceId, match, seats } = body;
+    const { visitorId, licenseHash, site: rawSite, performanceId, match, seats } = body;
+    const site = rawSite === "lms" ? "lms" : "resale"; // default to resale for backward compat
 
     // --- Visitor ID validation ---
     if (!visitorId || typeof visitorId !== "string" || !VISITOR_ID_RE.test(visitorId)) {
@@ -47,6 +48,23 @@ Deno.serve(async (req) => {
     }
 
     let seatEntries = Object.entries(seats);
+
+    // LMS zero-seat scans: record the snapshot and return early
+    if (seatEntries.length === 0 && site === "lms") {
+      await supabase.from("scan_snapshots").insert({
+        site,
+        performance_id: performanceId,
+        visitor_id: visitorId,
+        license_hash: licenseHash || null,
+        seat_count: 0,
+        seats_data: {},
+        currency: match?.currency || "USD",
+        match_name: match?.name || null,
+        match_date: match?.date || null,
+      });
+      return jsonResponse({ ok: true, empty: true });
+    }
+
     if (seatEntries.length < MIN_SEAT_COUNT) {
       return jsonResponse(
         { ok: false, error: `Seat count below ${MIN_SEAT_COUNT}` },
@@ -112,11 +130,14 @@ Deno.serve(async (req) => {
     }
 
     // Reject if >50% of seats have the same price (synthetic data)
-    const priceValues = Object.values(priceCounts);
-    if (priceValues.length > 0) {
-      const maxSamePrice = Math.max(...priceValues);
-      if (maxSamePrice / cleanedEntries.length > 0.5) {
-        return jsonResponse({ ok: false, error: "Suspicious price distribution" }, 400);
+    // Skip for LMS — face-value tickets legitimately share category-level prices
+    if (site !== "lms") {
+      const priceValues = Object.values(priceCounts);
+      if (priceValues.length > 0) {
+        const maxSamePrice = Math.max(...priceValues);
+        if (maxSamePrice / cleanedEntries.length > 0.5) {
+          return jsonResponse({ ok: false, error: "Suspicious price distribution" }, 400);
+        }
       }
     }
 
@@ -137,6 +158,7 @@ Deno.serve(async (req) => {
 
     // 1. Insert scan snapshot with JSONB seat data
     const { error: snapError } = await supabase.from("scan_snapshots").insert({
+      site,
       performance_id: performanceId,
       visitor_id: visitorId,
       license_hash: licenseHash || null,
@@ -151,10 +173,12 @@ Deno.serve(async (req) => {
       console.error("scan_snapshots insert error:", snapError);
     }
 
-    // 2. Replace seats for this match (delete old, insert fresh)
+    // 2. Replace seats for this match+site (delete old, insert fresh)
+    // CRITICAL: scope by (site, performance_id) — a resale rescan must NOT wipe LMS seats
     const { error: deleteError } = await supabase
       .from("seats")
       .delete()
+      .eq("site", site)
       .eq("performance_id", performanceId);
 
     if (deleteError) {
@@ -163,6 +187,7 @@ Deno.serve(async (req) => {
 
     const now = new Date().toISOString();
     const seatRows = cleanedEntries.map(([seatId, s]: [string, any]) => ({
+      site,
       performance_id: performanceId,
       seat_id: seatId,
       block: s.block || null,
@@ -190,10 +215,11 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 3. Recompute match_summary
+    // 3. Recompute match_summary (scoped to this site — LMS prices must not leak into resale stats)
     const { data: seatStats } = await supabase
       .from("seats")
       .select("price, exclusive, category, color")
+      .eq("site", site)
       .eq("performance_id", performanceId);
 
     if (seatStats && seatStats.length > 0) {
@@ -223,20 +249,23 @@ Deno.serve(async (req) => {
         color: d.color,
       }));
 
-      // Count unique scanners
+      // Count unique scanners (scoped to this site)
       const { count: uniqueScanners } = await supabase
         .from("scan_snapshots")
         .select("visitor_id", { count: "exact", head: true })
+        .eq("site", site)
         .eq("performance_id", performanceId);
 
-      // Get current scan count
+      // Get current scan count (scoped to this site)
       const { count: scanCount } = await supabase
         .from("scan_snapshots")
         .select("id", { count: "exact", head: true })
+        .eq("site", site)
         .eq("performance_id", performanceId);
 
       const { error: summaryError } = await supabase.from("match_summary").upsert(
         {
+          site,
           performance_id: performanceId,
           match_name: match?.name || null,
           match_date: match?.date || null,
@@ -253,7 +282,7 @@ Deno.serve(async (req) => {
           unique_scanners: uniqueScanners || 0,
           updated_at: new Date().toISOString(),
         },
-        { onConflict: "performance_id" }
+        { onConflict: "site,performance_id" }
       );
 
       if (summaryError) {
@@ -267,6 +296,7 @@ Deno.serve(async (req) => {
       const { data: existing } = await supabase
         .from("match_summary_history")
         .select("id")
+        .eq("site", site)
         .eq("performance_id", performanceId)
         .eq("hour", hourStart)
         .limit(1);
@@ -286,6 +316,7 @@ Deno.serve(async (req) => {
       } else {
         // Insert new hourly row
         await supabase.from("match_summary_history").insert({
+          site,
           performance_id: performanceId,
           total_seats: seatStats.length,
           available_seats: available.length,
