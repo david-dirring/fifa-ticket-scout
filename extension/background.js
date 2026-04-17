@@ -206,18 +206,12 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 async function fetchScanConfig() {
   try {
     const resp = await fetch(
-      `${SUPABASE_URL}/rest/v1/scan_config?id=eq.1&select=*`,
-      {
-        headers: {
-          "apikey": SUPABASE_ANON_KEY,
-          "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
-        },
-      }
+      "https://raw.githubusercontent.com/david-dirring/fifa-ticket-scout/main/scan_config.json"
     );
     if (!resp.ok) return;
-    const rows = await resp.json();
-    if (rows.length > 0) {
-      await chrome.storage.local.set({ scanConfig: rows[0] });
+    const config = await resp.json();
+    if (config && config.profiles) {
+      await chrome.storage.local.set({ scanConfig: config });
     }
   } catch (err) {
     console.log("[FIFA Ticket Scout] Scan config fetch failed (non-blocking):", err.message);
