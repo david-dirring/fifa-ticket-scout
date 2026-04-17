@@ -163,3 +163,25 @@ CREATE POLICY "Public read" ON match_summary_history FOR SELECT USING (true);
 CREATE POLICY "No direct inserts" ON match_summary_history FOR INSERT WITH CHECK (false);
 CREATE POLICY "No direct updates" ON match_summary_history FOR UPDATE USING (false);
 CREATE POLICY "No direct deletes" ON match_summary_history FOR DELETE USING (false);
+
+-- Remote scan config — singleton row, tunable via SQL editor
+CREATE TABLE scan_config (
+  id           int PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+  profiles     jsonb NOT NULL DEFAULT '{
+    "aggressive": {"min": 0,    "max": 0},
+    "balanced":   {"min": 600,  "max": 1000},
+    "cautious":   {"min": 1200, "max": 1800},
+    "stealth":    {"min": 1300, "max": 2700}
+  }',
+  tile_size              int NOT NULL DEFAULT 10000,
+  map_max                int NOT NULL DEFAULT 40000,
+  max_consecutive_blocks int NOT NULL DEFAULT 3,
+  retry_cooldown_ms      int NOT NULL DEFAULT 3000,
+  updated_at             timestamptz DEFAULT now()
+);
+
+ALTER TABLE scan_config ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Public read" ON scan_config FOR SELECT USING (true);
+CREATE POLICY "No direct writes" ON scan_config FOR INSERT WITH CHECK (false);
+CREATE POLICY "No direct updates" ON scan_config FOR UPDATE USING (false);
+CREATE POLICY "No direct deletes" ON scan_config FOR DELETE USING (false);

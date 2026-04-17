@@ -94,9 +94,9 @@
     if (event.source !== window) return;
     if (event.data?.type !== "FIFA_TICKET_SCOUT_SCAN") return;
 
-    const { productId, performanceId, scanSpeed } = event.data;
+    const { productId, performanceId, scanSpeed, scanConfig: cfg } = event.data;
     if (!productId || !performanceId) return;
-    console.log("[FIFA Ticket Scout] Scan started for", performanceId, "speed:", scanSpeed || "cautious");
+    console.log("[FIFA Ticket Scout] Scan started for", performanceId, "speed:", scanSpeed || "balanced");
 
     // Build headers — use captured ones or construct minimal required set
     const headers = capturedHeaders
@@ -123,11 +123,20 @@
 
     console.log("[FIFA Ticket Scout] Using headers:", Object.keys(headers).join(", "));
 
+    // Scan config — remote values from DB, with hardcoded fallbacks
+    const SPEED_PROFILES = (cfg && cfg.profiles) || {
+      aggressive: { min: 0,    max: 0 },
+      balanced:   { min: 600,  max: 1000 },
+      cautious:   { min: 1200, max: 1800 },
+      stealth:    { min: 1300, max: 2700 },
+    };
     const baseUrl = `/tnwr/v1/secure/seatmap/seats/free/ol`;
-    const tileSize = 10000;
-    const mapMax = 40000;
+    const tileSize = (cfg && cfg.tile_size) || 10000;
+    const mapMax = (cfg && cfg.map_max) || 40000;
+    const MAX_CONSECUTIVE_BLOCKS_CFG = (cfg && cfg.max_consecutive_blocks) || 3;
+    const retryCooldown = (cfg && cfg.retry_cooldown_ms) || 3000;
 
-    // 10k tiles on 5k-aligned grid covering 0-40k (mimics site's native pattern)
+    // Build tile grid
     const tiles = [];
     for (let x = 0; x < mapMax; x += tileSize) {
       for (let y = 0; y < mapMax; y += tileSize) {
@@ -136,23 +145,21 @@
     }
     const totalTiles = tiles.length;
 
-    const SPEED_PROFILES = {
-      stealth:    { min: 1300, max: 2275 },
-      cautious:   { min: 500,  max: 900 },
-      balanced:   { min: 900,  max: 1500 },
-      aggressive: { min: 0,    max: 0 },
-    };
     const profile = SPEED_PROFILES[scanSpeed] || SPEED_PROFILES.balanced;
     const DELAY_MIN = profile.min;
     const DELAY_MAX = profile.max;
     const AVG_DELAY = (DELAY_MIN + DELAY_MAX) / 2;
+
+    if (cfg) {
+      console.log("[FIFA Ticket Scout] Using remote scan config:", JSON.stringify(cfg).substring(0, 200));
+    }
 
     let completed = 0;
     let foundSeats = 0;
     let consecutiveBlocks = 0;
     let consecutiveEmpties = 0;
     let foundAnySeats = false;
-    const MAX_CONSECUTIVE_BLOCKS = 3;
+    const MAX_CONSECUTIVE_BLOCKS = MAX_CONSECUTIVE_BLOCKS_CFG;
     const MAX_CONSECUTIVE_EMPTIES = Math.max(Math.floor(totalTiles / 4), 5);
 
     window.postMessage({
@@ -255,7 +262,7 @@
     // Retry pass — wait a few seconds then retry blocked tiles
     if (blockedTiles.length > 0 && !aborted) {
       console.log("[FIFA Ticket Scout] Retrying", blockedTiles.length, "blocked tiles in 3s...");
-      await new Promise((r) => setTimeout(r, 3000));
+      await new Promise((r) => setTimeout(r, retryCooldown));
       consecutiveBlocks = 0;
       completed = totalTiles - blockedTiles.length;
       const stillBlocked = await scanTiles(blockedTiles);

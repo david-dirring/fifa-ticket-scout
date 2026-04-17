@@ -196,11 +196,36 @@ async function saveAlerts(payload) {
 
 // --- Re-verify license on alarm ---
 chrome.alarms.create("reverify-license", { periodInMinutes: 1440 });
+// --- Refresh remote scan config every 60 minutes ---
+chrome.alarms.create("refresh-scan-config", { periodInMinutes: 60 });
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === "reverify-license") reverifyLicense();
+  if (alarm.name === "refresh-scan-config") fetchScanConfig();
 });
 
-// Re-verify on service worker startup if stale
+async function fetchScanConfig() {
+  try {
+    const resp = await fetch(
+      `${SUPABASE_URL}/rest/v1/scan_config?id=eq.1&select=*`,
+      {
+        headers: {
+          "apikey": SUPABASE_ANON_KEY,
+          "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+        },
+      }
+    );
+    if (!resp.ok) return;
+    const rows = await resp.json();
+    if (rows.length > 0) {
+      await chrome.storage.local.set({ scanConfig: rows[0] });
+    }
+  } catch (err) {
+    console.log("[FIFA Ticket Scout] Scan config fetch failed (non-blocking):", err.message);
+  }
+}
+
+// Fetch scan config + re-verify license on service worker startup
+fetchScanConfig();
 getStorage().then((data) => {
   if (data.license && Date.now() - data.license.verifiedAt > REVERIFY_INTERVAL_MS) {
     reverifyLicense();
@@ -653,29 +678,26 @@ async function enforceGameLimit(gameKey) {
 }
 
 function sendScanToTab(productId, performanceId, tabId) {
-  chrome.storage.local.get(["scanSpeed", "license"], (data) => {
+  chrome.storage.local.get(["scanSpeed", "license", "scanConfig"], (data) => {
     let speed = data.scanSpeed || "balanced";
     const level = data.license?.level || 0;
     // Enforce: non-balanced speeds require Pro
     if (speed !== "balanced" && level < TIERS.PRO) {
       speed = "balanced";
     }
+    const msg = {
+      type: "START_SCAN",
+      productId,
+      performanceId,
+      scanSpeed: speed,
+      scanConfig: data.scanConfig || null,
+    };
     if (tabId) {
-      chrome.tabs.sendMessage(tabId, {
-        type: "START_SCAN",
-        productId,
-        performanceId,
-        scanSpeed: speed,
-      });
+      chrome.tabs.sendMessage(tabId, msg);
     } else {
       chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
         if (tabs[0]) {
-          chrome.tabs.sendMessage(tabs[0].id, {
-            type: "START_SCAN",
-            productId,
-            performanceId,
-            scanSpeed: speed,
-          });
+          chrome.tabs.sendMessage(tabs[0].id, msg);
         }
       });
     }
