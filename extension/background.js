@@ -343,18 +343,14 @@ const scanStartTimes = {};
 
 chrome.tabs.onRemoved.addListener((tabId) => {
   delete tabGameMap[tabId];
-  for (const key of scannedGames) {
-    if (key.startsWith(tabId + ":")) scannedGames.delete(key);
-  }
+  removeScannedGamesForTab(tabId);
 });
 
 // On page refresh/navigation, clear scanned state so auto-scan fires again
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   if (changeInfo.status === "loading") {
     delete tabGameMap[tabId];
-    for (const key of scannedGames) {
-      if (key.startsWith(tabId + ":")) scannedGames.delete(key);
-    }
+    removeScannedGamesForTab(tabId);
   }
 });
 
@@ -365,7 +361,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     processApiResponse(message.url, message.body, tabId);
   }
   if (message.type === "CLEAR_DATA") {
-    scannedGames.clear();
+    chrome.storage.session.remove("scannedGames");
     // Surgical: only wipe the captured-scan data. Everything else
     // (alertConfigs, license, visitorId, scanSpeed, filters) survives by
     // default. Avoids the historical "restore the things I forgot to wipe"
@@ -416,7 +412,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
       });
     }
-    sendScanToTab(message.productId, message.performanceId, tabId);
+    sendScanToTab(message.productId, message.performanceId, tabId, true);
   }
   if (message.type === "SCAN_PROGRESS") {
     // Forward progress to popup immediately (non-blocking)
@@ -672,27 +668,45 @@ async function saveProductId(perfId, productId, site) {
   await chrome.storage.local.set({ games });
 }
 
-// Track which tab+game combos we've already auto-scanned
-const scannedGames = new Set();
+// Track which tab+game combos we've already auto-scanned.
+// Persisted in chrome.storage.session so state survives SW restarts
+// but clears on browser close. Stored as { "tabId:site:perfId": timestamp }.
+async function getScannedGames() {
+  const data = await chrome.storage.session.get("scannedGames");
+  return data.scannedGames || {};
+}
 
-function autoScan(performanceId, productId, tabId, site) {
+async function addScannedGame(key) {
+  const sg = await getScannedGames();
+  sg[key] = Date.now();
+  await chrome.storage.session.set({ scannedGames: sg });
+}
+
+async function removeScannedGamesForTab(tabId) {
+  const sg = await getScannedGames();
+  const prefix = tabId + ":";
+  let changed = false;
+  for (const k of Object.keys(sg)) {
+    if (k.startsWith(prefix)) { delete sg[k]; changed = true; }
+  }
+  if (changed) await chrome.storage.session.set({ scannedGames: sg });
+}
+
+async function autoScan(performanceId, productId, tabId, site) {
   const key = tabId ? `${tabId}:${site}:${performanceId}` : `${site}:${performanceId}`;
-  if (scannedGames.has(key)) return;
-  scannedGames.add(key);
+  const sg = await getScannedGames();
+  if (sg[key]) return;
+  await addScannedGame(key);
 
   const gameKey = `${site}:${performanceId}`;
   // Clear old seats for a fresh snapshot before scanning
-  getStorage().then((data) => {
-    const games = data.games || {};
-    if (games[gameKey]) {
-      games[gameKey].seats = {};
-      chrome.storage.local.set({ games }, () => {
-        sendScanToTab(productId, performanceId, tabId);
-      });
-    } else {
-      sendScanToTab(productId, performanceId, tabId);
-    }
-  });
+  const data = await getStorage();
+  const games = data.games || {};
+  if (games[gameKey]) {
+    games[gameKey].seats = {};
+    await chrome.storage.local.set({ games });
+  }
+  sendScanToTab(productId, performanceId, tabId);
 }
 
 // Free tier: only one game at a time — clear old game when switching
@@ -708,7 +722,7 @@ async function enforceGameLimit(gameKey) {
   }
 }
 
-function sendScanToTab(productId, performanceId, tabId) {
+function sendScanToTab(productId, performanceId, tabId, force) {
   chrome.storage.local.get(["scanSpeed", "license", "scanConfig"], (data) => {
     let speed = data.scanSpeed || "balanced";
     const level = data.license?.level || 0;
@@ -722,6 +736,7 @@ function sendScanToTab(productId, performanceId, tabId) {
       performanceId,
       scanSpeed: speed,
       scanConfig: data.scanConfig || null,
+      force: !!force,
     };
     if (tabId) {
       chrome.tabs.sendMessage(tabId, msg);

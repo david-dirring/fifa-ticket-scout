@@ -7,6 +7,13 @@
   console.log("[FIFA Ticket Scout] Injected script loaded successfully");
   const MATCH_PATTERNS = ["/seatmap/", "/performance/"];
 
+  // Defense-in-depth: prevent duplicate scans at the page level.
+  // injected.js lives as long as the page — survives SW restarts.
+  let scanInProgress = false;
+  let lastScanPerformanceId = null;
+  let lastScanEndTime = 0;
+  const SCAN_COOLDOWN_MS = 60000;
+
   function shouldCapture(url) {
     return MATCH_PATTERNS.some((p) => url.includes(p));
   }
@@ -94,8 +101,23 @@
     if (event.source !== window) return;
     if (event.data?.type !== "FIFA_TICKET_SCOUT_SCAN") return;
 
-    const { productId, performanceId, scanSpeed, scanConfig: cfg } = event.data;
+    const { productId, performanceId, scanSpeed, scanConfig: cfg, force } = event.data;
     if (!productId || !performanceId) return;
+
+    // Guard: reject duplicate/redundant scans (unless force flag from manual rescan)
+    if (!force) {
+      if (scanInProgress) {
+        console.log("[FIFA Ticket Scout] Scan already in progress — ignoring");
+        return;
+      }
+      if (performanceId === lastScanPerformanceId &&
+          (Date.now() - lastScanEndTime) < SCAN_COOLDOWN_MS) {
+        console.log("[FIFA Ticket Scout] Scan cooldown active — ignoring");
+        return;
+      }
+    }
+    scanInProgress = true;
+
     console.log("[FIFA Ticket Scout] Scan started for", performanceId, "speed:", scanSpeed || "balanced");
 
     // Build headers — use captured ones or construct minimal required set
@@ -290,6 +312,10 @@
         status: "done",
       }, "*");
     }
+    scanInProgress = false;
+    lastScanPerformanceId = performanceId;
+    lastScanEndTime = Date.now();
+
     console.log("[FIFA Ticket Scout] Scan", aborted ? "aborted (" + (abortReason || "early stop") + ")" : "complete", ":", foundSeats, "seats found");
   });
 })();

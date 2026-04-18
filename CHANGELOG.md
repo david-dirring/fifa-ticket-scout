@@ -4,6 +4,18 @@ All notable changes to FIFA Ticket Scout are documented here. Timestamps are in 
 
 ---
 
+## April 18, 2026 — v2.3.1
+
+### Fix: Map Zoom Triggering DataDome Block
+
+Zooming the seatmap after a scan could trigger a duplicate full scan, causing DataDome to restrict access. Root cause: the `scannedGames` deduplication guard was an in-memory `Set` that was lost when the MV3 service worker terminated after idle (~30s). When the site's own `/seatmap/config` request fired on zoom, the restarted worker treated it as a fresh page and re-scanned.
+
+**Fix:** Persisted `scannedGames` in `chrome.storage.session` (survives SW restarts, clears on browser close). Added defense-in-depth `scanInProgress` flag and 60-second cooldown in `injected.js` to reject duplicate scan commands at the page level. Manual rescans from the popup bypass the cooldown via a `force` flag.
+
+**Files changed:** `extension/background.js`, `extension/injected.js`, `extension/content.js`, `extension/manifest.json`
+
+---
+
 ## April 18, 2026 — v2.3.0
 
 ### Insights Tab — Market Insights with Two Chart Types

@@ -133,6 +133,7 @@ chrome.runtime.onMessage.addListener((message) => {
       performanceId: message.performanceId,
       scanSpeed: message.scanSpeed,
       scanConfig: message.scanConfig || null,
+      force: message.force || false,
     }, "*");
   }
 });
