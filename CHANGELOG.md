@@ -4,6 +4,36 @@ All notable changes to FIFA Ticket Scout are documented here. Timestamps are in 
 
 ---
 
+## April 18, 2026
+
+### Insights Tab — Market Insights with Two Chart Types
+
+Replaced the "Coming Soon" placeholder with a fully functional Insights tab, powered by a Supabase materialized table (`insights_priced_to_sell`) that refreshes hourly via `pg_cron`.
+
+**Avg "Priced to Sell" (bar chart):** Shows the average price of the cheapest 15% of listings per day over 7 days. Represents what motivated sellers are actually asking. Day-over-day percentage change displayed above each bar. Color gradient dampened so narrow price ranges don't appear misleadingly different.
+
+**Wall Movement (heatmap):** Price distribution grid — days as columns, price ranges as rows. Cell intensity shows what percentage of that day's listings sit in each price bucket. Dark bands = price walls where sellers cluster. Bands drifting down = sellers capitulating. Dynamic bucketing collapses the top 20% (P80+) and mid-range (P50–P80) into single rows, with granular rows in the bottom 50% where walls are most visible. Royal blue color scale with adaptive text color (white on dark, gray on light).
+
+**Filters:** Four multi-select checkbox dropdowns (game, city, team, category) with cascading logic — selecting a city narrows the available games/teams/categories, and vice versa. LMS toggle ("Include Last Minute Sales site") off by default. Knockout games show stage + matchup code in dropdown (e.g. "#73 · R32 · 2A v 2B").
+
+**Info button:** (i) next to "Market Insights" toggles an explanation panel describing the current chart type and noting data is crowdsourced from the community.
+
+**"Current" column:** Rightmost column labeled "Current / Earlier Today" shows data from today's scans, refreshed hourly.
+
+**License gating:** Insights requires Pro + Web tier (level 20), lowered from Pro + Web + Alerts (30). Locked state shows faded preview screenshot background with license key input form — users can activate without switching to the Scanner tab. Same license input added to Alerts locked state.
+
+**Scan-ago timer:** Small "7 mins ago" label under the SCANNED badge, persisted in `chrome.storage.local` so it survives popup close/reopen. Updates every 60 seconds.
+
+**SQL architecture:** Two-phase refresh function — Phase 1 computes bottom-15% avg per (match, day, category), Phase 2 backfills price histograms ($50 buckets) from all seats. Uses `ROW_NUMBER()` top-5 scans per day with downstream NULL-price filtering (avoids expensive EXISTS checks). Staging table swap for zero-downtime refreshes. JOINs `match_schedule` for proper game info and `category_xref` for normalized category names (Cat 1–4, Accessible, Other).
+
+**Edge function (`get-insights`):** Paginated fetch (1000-row batches) to bypass Supabase `max_rows` cap. Pro + Web license verification via Gumroad API.
+
+**Files changed:** `extension/popup.js`, `extension/popup.css`, `extension/popup.html`, `extension/background.js`, `supabase/functions/get-insights/index.ts`
+**Files added:** `extension/images/insights-preview.png`, `extension/images/alerts-preview.png`
+**Local-only (not in repo):** `supabase/migrate_insights.sql`, `supabase/seed_category_xref.sql`
+
+---
+
 ## April 17, 2026
 
 ### Remote Scan Config — DB-Controlled Timing Profiles
