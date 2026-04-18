@@ -111,59 +111,148 @@ body {
   margin: 0;
 }
 
-.insights-cards {
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+.insights-filters {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
 }
 
-.insight-card {
-  padding: 14px;
-  background: var(--white);
+.insights-select {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  font-size: 11px;
+  padding: 5px 6px;
   border: 1px solid var(--border-dark);
   border-radius: var(--radius);
-  transition: border-color 0.15s;
+  background: var(--white);
+  color: var(--gray-800);
+  cursor: pointer;
+  text-overflow: ellipsis;
 }
 
-.insight-card:hover {
+.insights-select:focus {
+  outline: none;
   border-color: var(--fifa-purple);
 }
 
-.insight-card .card-icon {
-  font-size: 20px;
-  margin-bottom: 6px;
+/* Bar chart */
+
+.insights-chart {
+  padding: 12px 16px 16px;
 }
 
-.card-title-row {
+.chart-bars {
   display: flex;
+  gap: 6px;
+  align-items: flex-end;
+}
+
+.chart-bar-slot {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 8px;
+  min-width: 0;
+}
+
+.chart-bar-value-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--gray-800);
+  font-variant-numeric: tabular-nums;
+  margin-bottom: 4px;
+  white-space: nowrap;
+}
+
+.chart-bar-wrapper {
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.chart-bar {
+  width: 100%;
+  border-radius: 3px 3px 0 0;
+  transition: height 0.4s ease-out;
+  cursor: pointer;
+  position: relative;
+}
+
+.chart-bar:hover {
+  filter: brightness(1.15);
+}
+
+.chart-bar[title]:hover::after {
+  content: attr(title);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--gray-900);
+  color: var(--white);
+  font-size: 10px;
+  line-height: 1.4;
+  padding: 6px 10px;
+  border-radius: 6px;
+  white-space: pre;
+  z-index: 10;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+
+.chart-bar-nodata {
+  font-size: 9px;
+  color: var(--gray-400);
+  text-align: center;
+  padding-bottom: 8px;
+}
+
+.chart-bar-date {
+  font-size: 10px;
+  color: var(--gray-500);
+  margin-top: 6px;
+  white-space: nowrap;
+}
+
+.insights-loading {
+  padding: 32px 16px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--gray-500);
+}
+
+.insights-empty {
+  padding: 24px 16px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--gray-500);
+}
+
+.insights-locked {
+  padding: 20px 16px;
+  text-align: center;
+}
+
+.insights-locked-icon {
+  font-size: 32px;
+  margin-bottom: 8px;
+}
+
+.insights-locked-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--gray-800);
   margin-bottom: 4px;
 }
 
-.card-title {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--gray-900);
-}
-
-.card-badge {
-  font-size: 9px;
-  font-weight: 600;
-  padding: 2px 6px;
-  border-radius: 6px;
-  background: var(--gray-100);
+.insights-locked-msg {
+  font-size: 12px;
   color: var(--gray-500);
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-}
-
-.card-desc {
-  font-size: 11px;
-  color: var(--gray-500);
-  margin: 0;
-  line-height: 1.4;
+  margin-bottom: 14px;
 }
 
 /* ---- Alerts Tab ---- */

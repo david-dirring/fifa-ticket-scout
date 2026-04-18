@@ -23,6 +23,7 @@ document.addEventListener("DOMContentLoaded", () => {
         p.style.display = p.id === `tab-${target}` ? "" : "none";
       });
       if (target === "alerts") renderAlertsTab();
+      if (target === "insights") renderInsightsTab();
     });
   });
 
@@ -2015,4 +2016,318 @@ function updateScanProgress(perfId, completed, total, status, eta) {
     }
     document.getElementById("progressText").textContent = label;
   }
+}
+
+// --- Insights Tab ---
+
+let insightsLoaded = false;
+let insightsData = [];
+let insightsFilters = { game: "All", stadium: "All", team: "All", category: "All" };
+
+function renderInsightsTab() {
+  const container = document.getElementById("insightsContent");
+
+  if (userLevel < TIERS.PRO_WEB_ALERTS) {
+    container.innerHTML = renderInsightsLocked();
+    return;
+  }
+
+  if (insightsLoaded) {
+    renderInsightsChart();
+    return;
+  }
+
+  container.innerHTML = `
+    <div class="insights-header">
+      <h2>Market Insights</h2>
+      <p class="insights-subtitle">Loading crowdsourced pricing data&hellip;</p>
+    </div>
+    <div class="insights-loading">Loading&hellip;</div>
+  `;
+
+  chrome.runtime.sendMessage({ type: "FETCH_INSIGHTS" }, (result) => {
+    if (!result || !result.ok) {
+      container.innerHTML = `
+        <div class="insights-header">
+          <h2>Market Insights</h2>
+          <p class="insights-subtitle">${escapeHtml(result?.error || "Could not load insights.")}</p>
+        </div>
+      `;
+      return;
+    }
+    insightsData = result.data || [];
+    insightsLoaded = true;
+    renderInsightsChart();
+  });
+}
+
+function renderInsightsLocked() {
+  return `
+    <div class="insights-header">
+      <h2>Market Insights</h2>
+      <p class="insights-subtitle">Crowdsourced "priced to sell" averages across all scanned matches.</p>
+    </div>
+    <div class="insights-locked">
+      <div class="insights-locked-icon">&#x1F512;</div>
+      <div class="insights-locked-title">Insights is a Pro + Web + Alerts feature</div>
+      <p class="insights-locked-msg">
+        See the average bottom-15% price for every match, broken down by category.
+        Powered by data from every Ticket Scout user.
+      </p>
+      <a href="https://fifaticketscout.com/#pricing" target="_blank" class="btn-upgrade">
+        Upgrade &mdash; choose PRO + WEB + ALERTS &rarr;
+      </a>
+    </div>
+  `;
+}
+
+// Interpolate between green (#1a9850) and black (#000000) by t (0=green, 1=black)
+function insightsBarColor(t) {
+  const r = Math.round(0x1a * (1 - t));
+  const g = Math.round(0x98 * (1 - t));
+  const b = Math.round(0x50 * (1 - t));
+  return `rgb(${r},${g},${b})`;
+}
+
+function renderInsightsChart() {
+  const container = document.getElementById("insightsContent");
+
+  if (insightsData.length === 0) {
+    container.innerHTML = `
+      <div class="insights-header">
+        <h2>Market Insights</h2>
+        <p class="insights-subtitle">No scan data available yet. Check back after scans have been recorded.</p>
+      </div>
+    `;
+    return;
+  }
+
+  // Helper: split matchup string into individual team names
+  function splitTeams(matchup) {
+    if (!matchup) return [];
+    return matchup.split(/\s+v(?:s\.?)?\s+/i).map((t) => t.trim()).filter(Boolean);
+  }
+
+  // Helper: does a row match a single-team filter?
+  function rowMatchesTeam(r, team) {
+    return splitTeams(r.teams).includes(team);
+  }
+
+  // Apply each filter independently so we can derive cascading options
+  // For each dropdown, options = values present after applying ALL OTHER filters
+  function applyFiltersExcept(skip) {
+    let rows = insightsData;
+    if (skip !== "game" && insightsFilters.game !== "All") {
+      rows = rows.filter((r) => r.performance_id === insightsFilters.game);
+    }
+    if (skip !== "stadium" && insightsFilters.stadium !== "All") {
+      rows = rows.filter((r) => r.stadium === insightsFilters.stadium);
+    }
+    if (skip !== "team" && insightsFilters.team !== "All") {
+      rows = rows.filter((r) => rowMatchesTeam(r, insightsFilters.team));
+    }
+    if (skip !== "category" && insightsFilters.category !== "All") {
+      rows = rows.filter((r) => r.category === insightsFilters.category);
+    }
+    return rows;
+  }
+
+  // Cascading options: each dropdown shows only values compatible with the other filters
+  const gamePool = applyFiltersExcept("game");
+  const gameOptions = [];
+  const seen = new Set();
+  for (const r of gamePool) {
+    if (!seen.has(r.performance_id) && r.match_number) {
+      seen.add(r.performance_id);
+      gameOptions.push({ id: r.performance_id, label: `${r.match_number} \u00B7 ${r.teams || ""}` });
+    }
+  }
+  gameOptions.sort((a, b) => {
+    const na = parseInt(a.label.replace(/\D/g, "")) || 0;
+    const nb = parseInt(b.label.replace(/\D/g, "")) || 0;
+    return na - nb;
+  });
+
+  const stadiumPool = applyFiltersExcept("stadium");
+  const stadiums = [...new Set(stadiumPool.map((r) => r.stadium).filter(Boolean))].sort();
+
+  const teamPool = applyFiltersExcept("team");
+  const teamSet = new Set();
+  for (const r of teamPool) {
+    for (const t of splitTeams(r.teams)) teamSet.add(t);
+  }
+  const individualTeams = [...teamSet].sort();
+
+  const categoryPool = applyFiltersExcept("category");
+  const categories = [...new Set(categoryPool.map((r) => r.category).filter(Boolean))].sort();
+
+  // Reset any filter whose current value is no longer in the available options
+  if (insightsFilters.game !== "All" && !gameOptions.some((g) => g.id === insightsFilters.game)) insightsFilters.game = "All";
+  if (insightsFilters.stadium !== "All" && !stadiums.includes(insightsFilters.stadium)) insightsFilters.stadium = "All";
+  if (insightsFilters.team !== "All" && !individualTeams.includes(insightsFilters.team)) insightsFilters.team = "All";
+  if (insightsFilters.category !== "All" && !categories.includes(insightsFilters.category)) insightsFilters.category = "All";
+
+  // Final filtered set (all filters applied)
+  const filtered = applyFiltersExcept(null);
+
+  // Aggregate by scan_date: weighted avg of avg_priced_to_sell by seats_in_bottom_15
+  const byDate = {};
+  for (const r of filtered) {
+    const d = r.scan_date;
+    if (!byDate[d]) byDate[d] = { weightedSum: 0, totalWeight: 0, totalSeats: 0, bottom15Count: 0 };
+    const w = r.seats_in_bottom_15 || 1;
+    byDate[d].weightedSum += Number(r.avg_priced_to_sell) * w;
+    byDate[d].totalWeight += w;
+    byDate[d].totalSeats += r.total_seats || 0;
+    byDate[d].bottom15Count += r.seats_in_bottom_15 || 0;
+  }
+
+  // Build 7-day array (oldest first)
+  const dates = Object.keys(byDate).sort();
+  const bars = dates.map((d) => {
+    const b = byDate[d];
+    const avg = b.totalWeight > 0 ? b.weightedSum / b.totalWeight : 0;
+    return {
+      date: d,
+      avg: Math.round(avg * 100) / 100,
+      totalSeats: b.totalSeats,
+      bottom15Count: b.bottom15Count,
+    };
+  });
+
+  // Color gradient: cheapest = green, most expensive = black, by value
+  const withData = bars.filter((b) => b.avg > 0);
+  let minPrice = 0, maxPrice = 0;
+  if (withData.length > 0) {
+    minPrice = Math.min(...withData.map((b) => b.avg));
+    maxPrice = Math.max(...withData.map((b) => b.avg));
+  }
+  const priceRange = maxPrice - minPrice;
+
+  for (const bar of bars) {
+    if (bar.avg <= 0) {
+      bar.color = null; // no data
+    } else if (priceRange === 0) {
+      bar.color = insightsBarColor(0); // all same → green
+    } else {
+      bar.color = insightsBarColor((bar.avg - minPrice) / priceRange);
+    }
+    bar.limited = bar.totalSeats > 0 && bar.totalSeats < 5;
+  }
+
+  // Y-axis max (round up to nearest nice number)
+  const yMax = maxPrice > 0 ? Math.ceil(maxPrice / 100) * 100 : 100;
+
+  // Format date label: "Apr 10"
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  function fmtDate(d) {
+    const p = d.split("-");
+    return months[parseInt(p[1]) - 1] + " " + parseInt(p[2]);
+  }
+
+  // Active filter context string
+  const filterCtx = [
+    insightsFilters.game === "All" ? "All games" : gameOptions.find((g) => g.id === insightsFilters.game)?.label || "",
+    insightsFilters.stadium === "All" ? "All stadiums" : insightsFilters.stadium,
+    insightsFilters.team === "All" ? "All teams" : insightsFilters.team,
+    insightsFilters.category === "All" ? "All categories" : insightsFilters.category,
+  ].join(" \u00B7 ");
+
+  // Build bar HTML
+  const CHART_HEIGHT = 200;
+  let barsHtml = "";
+  for (const bar of bars) {
+    if (bar.avg <= 0) {
+      barsHtml += `
+        <div class="chart-bar-slot">
+          <div class="chart-bar-value-label">&nbsp;</div>
+          <div class="chart-bar-wrapper" style="height:${CHART_HEIGHT}px;">
+            <div class="chart-bar-nodata">No data</div>
+          </div>
+          <div class="chart-bar-date">${fmtDate(bar.date)}</div>
+        </div>`;
+      continue;
+    }
+
+    const pct = (bar.avg / yMax) * 100;
+    const opacity = bar.limited ? 0.5 : 1;
+    const tooltipLines = [
+      fmtDate(bar.date),
+      `$${formatPrice(bar.avg)}`,
+      `avg of ${bar.bottom15Count} listing${bar.bottom15Count !== 1 ? "s" : ""}`,
+      `${bar.totalSeats} total listing${bar.totalSeats !== 1 ? "s" : ""} that day`,
+      filterCtx,
+    ];
+    if (bar.limited) tooltipLines.push("limited data");
+    const tooltip = tooltipLines.join("\n");
+
+    barsHtml += `
+      <div class="chart-bar-slot">
+        <div class="chart-bar-value-label">$${formatPrice(bar.avg)}</div>
+        <div class="chart-bar-wrapper" style="height:${CHART_HEIGHT}px;">
+          <div class="chart-bar" style="height:${pct}%;background:${bar.color};opacity:${opacity};" title="${escapeHtml(tooltip)}"></div>
+        </div>
+        <div class="chart-bar-date">${fmtDate(bar.date)}</div>
+      </div>`;
+  }
+
+  // Empty state
+  if (bars.length === 0) {
+    barsHtml = `<div class="insights-empty">No data for the selected filters.</div>`;
+  }
+
+  container.innerHTML = `
+    <div class="insights-filters">
+      <select id="insightsFilterGame" class="insights-select">
+        <option value="All">All games</option>
+        ${gameOptions.map((g) => `<option value="${escapeHtml(g.id)}" ${insightsFilters.game === g.id ? "selected" : ""}>${escapeHtml(g.label)}</option>`).join("")}
+      </select>
+      <select id="insightsFilterStadium" class="insights-select">
+        <option value="All">All stadiums</option>
+        ${stadiums.map((s) => `<option value="${escapeHtml(s)}" ${insightsFilters.stadium === s ? "selected" : ""}>${escapeHtml(s)}</option>`).join("")}
+      </select>
+      <select id="insightsFilterTeam" class="insights-select">
+        <option value="All">All teams</option>
+        ${individualTeams.map((t) => `<option value="${escapeHtml(t)}" ${insightsFilters.team === t ? "selected" : ""}>${escapeHtml(t)}</option>`).join("")}
+      </select>
+      <select id="insightsFilterCategory" class="insights-select">
+        <option value="All">All categories</option>
+        ${categories.map((c) => `<option value="${escapeHtml(c)}" ${insightsFilters.category === c ? "selected" : ""}>${escapeHtml(c)}</option>`).join("")}
+      </select>
+    </div>
+    <div class="insights-header">
+      <h2>Market Insights</h2>
+      <p class="insights-subtitle">Avg "priced to sell" &mdash; bottom 15% of seats, last 7 days</p>
+    </div>
+    <div class="insights-chart">
+      <div class="chart-bars">${barsHtml}</div>
+    </div>
+  `;
+
+  // Bind filter handlers
+  document.getElementById("insightsFilterGame").addEventListener("change", (e) => {
+    insightsFilters.game = e.target.value;
+    renderInsightsChart();
+  });
+  document.getElementById("insightsFilterStadium").addEventListener("change", (e) => {
+    insightsFilters.stadium = e.target.value;
+    renderInsightsChart();
+  });
+  document.getElementById("insightsFilterTeam").addEventListener("change", (e) => {
+    insightsFilters.team = e.target.value;
+    renderInsightsChart();
+  });
+  document.getElementById("insightsFilterCategory").addEventListener("change", (e) => {
+    insightsFilters.category = e.target.value;
+    renderInsightsChart();
+  });
+
+  // Animate bars in
+  requestAnimationFrame(() => {
+    container.querySelectorAll(".chart-bar").forEach((el) => {
+      const target = el.style.height;
+      el.style.height = "0%";
+      requestAnimationFrame(() => { el.style.height = target; });
+    });
+  });
 }

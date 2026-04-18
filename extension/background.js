@@ -141,6 +141,38 @@ async function fetchAlerts() {
   }
 }
 
+async function fetchInsights() {
+  try {
+    const data = await getStorage();
+    const license = data.license;
+    if (!license?.key) {
+      return { ok: false, error: "No license found." };
+    }
+    if ((license.level || 0) < TIERS.PRO_WEB_ALERTS) {
+      return { ok: false, error: "Insights requires Pro + Web + Alerts tier." };
+    }
+
+    const resp = await fetch(`${SUPABASE_URL}/functions/v1/get-insights`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+        "apikey": SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ licenseKey: license.key }),
+    });
+
+    const result = await resp.json();
+    if (!resp.ok || !result.ok) {
+      return { ok: false, error: result.error || "Fetch failed." };
+    }
+    return result;
+  } catch (err) {
+    console.log("[FIFA Ticket Scout] fetchInsights error:", err.message);
+    return { ok: false, error: "Could not reach server. Check your connection." };
+  }
+}
+
 async function saveAlerts(payload) {
   try {
     const data = await getStorage();
@@ -358,6 +390,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   if (message.type === "FETCH_ALERTS") {
     fetchAlerts().then(sendResponse);
+    return true;
+  }
+  if (message.type === "FETCH_INSIGHTS") {
+    fetchInsights().then(sendResponse);
     return true;
   }
   if (message.type === "SAVE_ALERTS") {
