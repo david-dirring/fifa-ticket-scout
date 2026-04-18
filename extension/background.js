@@ -148,8 +148,8 @@ async function fetchInsights() {
     if (!license?.key) {
       return { ok: false, error: "No license found." };
     }
-    if ((license.level || 0) < TIERS.PRO_WEB_ALERTS) {
-      return { ok: false, error: "Insights requires Pro + Web + Alerts tier." };
+    if ((license.level || 0) < TIERS.PRO_WEB) {
+      return { ok: false, error: "Insights requires Pro + Web tier." };
     }
 
     const resp = await fetch(`${SUPABASE_URL}/functions/v1/get-insights`, {
@@ -458,6 +458,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const startTime = scanStartTimes[gameKey];
         const durationMs = startTime ? Date.now() - startTime : null;
         delete scanStartTimes[gameKey];
+        chrome.storage.local.set({ lastScanTime: Date.now() });
         syncToSupabase(gameKey, durationMs);
       }
     });
