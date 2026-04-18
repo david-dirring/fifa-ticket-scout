@@ -1,5 +1,6 @@
 const TIERS = { FREE: 0, PRO: 10, PRO_WEB: 20, PRO_WEB_ALERTS: 30 };
 let userLevel = 0;
+let lastScanTime = 0;
 
 document.addEventListener("DOMContentLoaded", () => {
   // Load license first, then data
@@ -200,6 +201,14 @@ function renderDashboard(game) {
   document.getElementById("noData").style.display = "none";
   document.getElementById("dashboard").style.display = "block";
   document.getElementById("liveBadge").style.display = "inline-flex";
+
+  // Restore scan time from storage
+  if (!lastScanTime) {
+    chrome.storage.local.get("lastScanTime", (d) => {
+      lastScanTime = d.lastScanTime || 0;
+      updateScanAgo();
+    });
+  }
 
   const seats = Object.values(game.seats || {}).filter(s => s.exclusive !== false && s.price != null);
   const match = game.match;
@@ -1119,6 +1128,7 @@ function renderAlertsTab() {
   // Check tier
   if (userLevel < TIERS.PRO_WEB_ALERTS) {
     container.innerHTML = renderAlertsLocked();
+    bindLockedLicenseForm(() => renderAlertsTab());
     return;
   }
 
@@ -1211,20 +1221,20 @@ function getFaceValueForCategory(matchNumber, category) {
 
 function renderAlertsLocked() {
   return `
-    <div class="alerts-header">
-      <h2>Alerts</h2>
-      <p class="alerts-subtitle">Get notified when prices drop on the games that matter to you.</p>
-    </div>
-    <div class="alerts-locked">
-      <div class="alerts-locked-icon">&#x1F512;</div>
-      <div class="alerts-locked-title">Alerts is a Pro + Web + Alerts feature</div>
-      <p class="alerts-locked-msg">
-        Pick up to 3 games and we'll email you when prices drop below your target.
-        Built for fans trying to get into the stadium with their family, not for flippers.
-      </p>
-      <a href="https://fifaticketscout.com/#pricing" target="_blank" class="btn-upgrade">
-        Upgrade &mdash; choose PRO + WEB + ALERTS &rarr;
-      </a>
+    <div class="locked-preview-wrap">
+      <img src="images/alerts-preview.png" class="locked-preview-bg" alt="">
+      <div class="locked-overlay">
+        <div class="alerts-locked-icon">&#x1F512;</div>
+        <div class="alerts-locked-title">Alerts is a Pro + Web + Alerts feature</div>
+        <p class="alerts-locked-msg">
+          Pick up to 3 games and we'll email you when prices drop below your target.
+          Built for fans trying to get into the stadium with their family, not for flippers.
+        </p>
+        <a href="https://fifaticketscout.com/#pricing" target="_blank" class="btn-upgrade">
+          Upgrade &mdash; choose PRO + WEB + ALERTS &rarr;
+        </a>
+        ${lockedLicenseFormHtml()}
+      </div>
     </div>
   `;
 }
@@ -1953,6 +1963,22 @@ function startScan() {
   });
 }
 
+function updateScanAgo() {
+  const el = document.getElementById("scanAgo");
+  if (!el || !lastScanTime) return;
+  const secs = Math.floor((Date.now() - lastScanTime) / 1000);
+  if (secs < 60) {
+    el.textContent = "just now";
+  } else if (secs < 3600) {
+    const mins = Math.floor(secs / 60);
+    el.textContent = mins + " min" + (mins !== 1 ? "s" : "") + " ago";
+  } else {
+    const hrs = Math.floor(secs / 3600);
+    el.textContent = hrs + " hr" + (hrs !== 1 ? "s" : "") + " ago";
+  }
+}
+setInterval(updateScanAgo, 60000);
+
 function updateScanProgress(perfId, completed, total, status, eta) {
   // Only update progress for the currently displayed game
   // currentPerfId is now a compound key (site:perfId), so compare the perfId suffix
@@ -1964,6 +1990,10 @@ function updateScanProgress(perfId, completed, total, status, eta) {
   const badgeText = document.getElementById("liveBadgeText");
   if (badgeText) {
     badgeText.textContent = (status === "done" || pct >= 100) ? "SCANNED" : "SCANNING";
+  }
+  if (status === "done") {
+    lastScanTime = Date.now();
+    updateScanAgo();
   }
 
   // Track scan timing
@@ -2022,13 +2052,17 @@ function updateScanProgress(perfId, completed, total, status, eta) {
 
 let insightsLoaded = false;
 let insightsData = [];
-let insightsFilters = { game: "All", stadium: "All", team: "All", category: "All" };
+let insightsChartType = "wall-movement";
+let insightsIncludeLms = false;
+// Each filter is a Set of selected values, empty Set = "All"
+let insightsFilters = { game: new Set(), stadium: new Set(), team: new Set(), category: new Set() };
 
 function renderInsightsTab() {
   const container = document.getElementById("insightsContent");
 
-  if (userLevel < TIERS.PRO_WEB_ALERTS) {
+  if (userLevel < TIERS.PRO_WEB) {
     container.innerHTML = renderInsightsLocked();
+    bindLockedLicenseForm(() => renderInsightsTab());
     return;
   }
 
@@ -2061,22 +2095,72 @@ function renderInsightsTab() {
   });
 }
 
+function lockedLicenseFormHtml() {
+  return `
+    <div class="locked-license-form">
+      <p class="license-hint">Already have a license key?</p>
+      <div class="license-input-row">
+        <input type="text" id="lockedLicenseInput" class="license-input"
+               placeholder="XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX"
+               spellcheck="false" autocomplete="off">
+        <button class="btn-activate" id="lockedActivateBtn">Activate</button>
+      </div>
+      <div class="license-error" id="lockedLicenseError" style="display:none;"></div>
+    </div>
+  `;
+}
+
+function bindLockedLicenseForm(onSuccess) {
+  const input = document.getElementById("lockedLicenseInput");
+  const btn = document.getElementById("lockedActivateBtn");
+  const errorEl = document.getElementById("lockedLicenseError");
+  if (!btn || !input) return;
+
+  function doActivate() {
+    const key = input.value.trim();
+    if (!key) {
+      errorEl.textContent = "Please enter a license key.";
+      errorEl.style.display = "block";
+      return;
+    }
+    btn.disabled = true;
+    btn.textContent = "Activating\u2026";
+    errorEl.style.display = "none";
+
+    chrome.runtime.sendMessage({ type: "ACTIVATE_LICENSE", licenseKey: key }, (resp) => {
+      if (resp && resp.ok) {
+        userLevel = resp.level || 0;
+        renderLicenseSection(resp.license || { key, level: userLevel });
+        if (onSuccess) onSuccess();
+      } else {
+        btn.disabled = false;
+        btn.textContent = "Activate";
+        errorEl.textContent = resp?.error || "Activation failed.";
+        errorEl.style.display = "block";
+      }
+    });
+  }
+
+  btn.addEventListener("click", doActivate);
+  input.addEventListener("keydown", (e) => { if (e.key === "Enter") doActivate(); });
+}
+
 function renderInsightsLocked() {
   return `
-    <div class="insights-header">
-      <h2>Market Insights</h2>
-      <p class="insights-subtitle">Crowdsourced "priced to sell" averages across all scanned matches.</p>
-    </div>
-    <div class="insights-locked">
-      <div class="insights-locked-icon">&#x1F512;</div>
-      <div class="insights-locked-title">Insights is a Pro + Web + Alerts feature</div>
-      <p class="insights-locked-msg">
-        See the average bottom-15% price for every match, broken down by category.
-        Powered by data from every Ticket Scout user.
-      </p>
-      <a href="https://fifaticketscout.com/#pricing" target="_blank" class="btn-upgrade">
-        Upgrade &mdash; choose PRO + WEB + ALERTS &rarr;
-      </a>
+    <div class="locked-preview-wrap">
+      <img src="images/insights-preview.png" class="locked-preview-bg" alt="">
+      <div class="locked-overlay">
+        <div class="insights-locked-icon">&#x1F512;</div>
+        <div class="insights-locked-title">Insights is a Pro + Web feature</div>
+        <p class="insights-locked-msg">
+          See the average bottom-15% price for every match, broken down by category.
+          Powered by data from every Ticket Scout user.
+        </p>
+        <a href="https://fifaticketscout.com/#pricing" target="_blank" class="btn-upgrade">
+          Upgrade &mdash; choose PRO + WEB &rarr;
+        </a>
+        ${lockedLicenseFormHtml()}
+      </div>
     </div>
   `;
 }
@@ -2087,6 +2171,149 @@ function insightsBarColor(t) {
   const g = Math.round(0x98 * (1 - t));
   const b = Math.round(0x50 * (1 - t));
   return `rgb(${r},${g},${b})`;
+}
+
+// Build wall movement heatmap HTML from filtered data
+function buildWallHeatmap(filtered, dates, fmtDate, fmtDateLabel) {
+  if (filtered.length === 0 || dates.length === 0) {
+    return `<div class="insights-empty">No data for the selected filters.</div>`;
+  }
+
+  // Merge price_histogram by date: { date → { bucket → count } }
+  const merged = {};
+  for (const d of dates) merged[d] = {};
+  for (const r of filtered) {
+    const d = r.scan_date;
+    if (!merged[d]) continue;
+    const hist = r.price_histogram;
+    if (!hist || typeof hist !== "object") continue;
+    for (const [bucket, cnt] of Object.entries(hist)) {
+      const b = Number(bucket);
+      merged[d][b] = (merged[d][b] || 0) + Number(cnt);
+    }
+  }
+
+  // Collect all prices to compute percentiles
+  const allPrices = [];
+  for (const d of dates) {
+    for (const [bucket, cnt] of Object.entries(merged[d])) {
+      for (let i = 0; i < cnt; i++) allPrices.push(Number(bucket));
+    }
+  }
+  if (allPrices.length === 0) {
+    return `<div class="insights-empty">No price data available.</div>`;
+  }
+  allPrices.sort((a, b) => a - b);
+
+  const p50 = allPrices[Math.floor(allPrices.length * 0.50)];
+  const p80 = allPrices[Math.floor(allPrices.length * 0.80)];
+  const minPrice = allPrices[0];
+
+  // Build dynamic bucket ranges
+  // Bottom 50%: ~8-10 rows of equal width from minPrice to p50
+  const bottomRange = p50 - minPrice;
+  const bucketWidth = bottomRange > 0 ? Math.max(25, Math.ceil(bottomRange / 10 / 25) * 25) : 50;
+  const bucketRanges = []; // { floor, ceil, label }
+
+  // Bottom 50% buckets
+  for (let floor = Math.floor(minPrice / bucketWidth) * bucketWidth; floor < p50; floor += bucketWidth) {
+    bucketRanges.push({ floor, ceil: floor + bucketWidth, label: `$${Math.round(floor)}-${Math.round(floor + bucketWidth)}` });
+  }
+  // P50-P80 bucket
+  if (p80 > p50) {
+    bucketRanges.push({ floor: p50, ceil: p80, label: `$${Math.round(p50)}-${Math.round(p80)}` });
+  }
+  // Above P80 bucket
+  const maxBucket = Math.max(...Object.keys(merged[dates[0]] || {}).map(Number), ...Object.keys(merged[dates[dates.length - 1]] || {}).map(Number), p80 + 50);
+  bucketRanges.push({ floor: p80, ceil: maxBucket + 50, label: `$${Math.round(p80)}+` });
+
+  if (bucketRanges.length === 0) {
+    return `<div class="insights-empty">Not enough price variation.</div>`;
+  }
+
+  // Map raw $50 histogram buckets into dynamic ranges for each date
+  const grid = []; // grid[rowIdx][colIdx] = count
+  for (let ri = 0; ri < bucketRanges.length; ri++) {
+    grid[ri] = [];
+    for (let ci = 0; ci < dates.length; ci++) {
+      const dayHist = merged[dates[ci]];
+      let count = 0;
+      for (const [rawBucket, cnt] of Object.entries(dayHist)) {
+        const price = Number(rawBucket);
+        if (price >= bucketRanges[ri].floor && price < bucketRanges[ri].ceil) {
+          count += cnt;
+        }
+      }
+      grid[ri][ci] = count;
+    }
+  }
+
+  // Compute column totals for percentage-based coloring
+  const colTotals = [];
+  for (let ci = 0; ci < dates.length; ci++) {
+    let total = 0;
+    for (let ri = 0; ri < bucketRanges.length; ri++) total += grid[ri][ci];
+    colTotals[ci] = total;
+  }
+
+  // Find max percentage across all cells for color scaling
+  let maxPct = 0;
+  for (let ri = 0; ri < bucketRanges.length; ri++) {
+    for (let ci = 0; ci < dates.length; ci++) {
+      if (colTotals[ci] > 0) {
+        const pct = grid[ri][ci] / colTotals[ci];
+        if (pct > maxPct) maxPct = pct;
+      }
+    }
+  }
+
+  // Render grid: rows from top (cheap) to bottom (expensive)
+  let cellsHtml = "";
+  for (let ri = 0; ri < bucketRanges.length; ri++) {
+    for (let ci = 0; ci < dates.length; ci++) {
+      const count = grid[ri][ci];
+      const pct = colTotals[ci] > 0 ? count / colTotals[ci] : 0;
+      const intensity = maxPct > 0 ? pct / maxPct : 0;
+      // Color: royal blue (#1a3cb5) → white, with power curve so white only appears near zero
+      let bg = "transparent";
+      if (count > 0) {
+        // t=1 at full intensity (royal blue), t=0 at zero (white)
+        // Power curve: stay blue longer, fade to white only at very low values
+        const t = Math.pow(intensity, 0.35);
+        const r = Math.round(255 - t * (255 - 26));
+        const g = Math.round(255 - t * (255 - 60));
+        const b = Math.round(255 - t * (255 - 181));
+        bg = `rgb(${r},${g},${b})`;
+      }
+      const pctLabel = colTotals[ci] > 0 ? (pct * 100).toFixed(1) + "%" : "0%";
+      const tooltip = `${fmtDate(dates[ci])}\n${bucketRanges[ri].label}\n${count} listing${count !== 1 ? "s" : ""}\n${pctLabel} of day's tickets`;
+      const cellLabel = count > 0 ? pctLabel : "";
+      const textColor = intensity > 0.3 ? "#fff" : "#4a5568";
+      cellsHtml += `<div class="heatmap-cell" style="background:${bg};color:${textColor};" title="${escapeHtml(tooltip)}">${cellLabel}</div>`;
+    }
+  }
+
+  // Y-axis labels (top = cheap, bottom = expensive)
+  let yLabelsHtml = "";
+  for (let ri = 0; ri < bucketRanges.length; ri++) {
+    yLabelsHtml += `<div class="heatmap-y-label">${bucketRanges[ri].label}</div>`;
+  }
+
+  // X-axis labels
+  let xLabelsHtml = dates.map((d) => `<div class="heatmap-x-label">${fmtDateLabel(d)}</div>`).join("");
+
+  // Pad x-axis left to match y-axis width
+  return `
+    <div class="heatmap-wrap">
+      <div class="heatmap-y-axis" style="grid-template-rows:repeat(${bucketRanges.length},1fr);">${yLabelsHtml}</div>
+      <div class="heatmap-grid" style="grid-template-columns:repeat(${dates.length},1fr);grid-template-rows:repeat(${bucketRanges.length},1fr);">
+        ${cellsHtml}
+      </div>
+    </div>
+    <div class="heatmap-x-axis" style="padding-left:70px;">
+      ${xLabelsHtml}
+    </div>
+  `;
 }
 
 function renderInsightsChart() {
@@ -2102,32 +2329,34 @@ function renderInsightsChart() {
     return;
   }
 
-  // Helper: split matchup string into individual team names
-  function splitTeams(matchup) {
-    if (!matchup) return [];
-    return matchup.split(/\s+v(?:s\.?)?\s+/i).map((t) => t.trim()).filter(Boolean);
+  // Helper: get both team names from a row
+  function rowTeams(r) {
+    return [r.home_team, r.away_team].filter(Boolean);
   }
 
-  // Helper: does a row match a single-team filter?
-  function rowMatchesTeam(r, team) {
-    return splitTeams(r.teams).includes(team);
+  // Helper: does a Set-based filter match? Empty set = all
+  function filterActive(filterSet) {
+    return filterSet.size > 0;
   }
 
   // Apply each filter independently so we can derive cascading options
-  // For each dropdown, options = values present after applying ALL OTHER filters
   function applyFiltersExcept(skip) {
     let rows = insightsData;
-    if (skip !== "game" && insightsFilters.game !== "All") {
-      rows = rows.filter((r) => r.performance_id === insightsFilters.game);
+    // Site filter: always applied (not part of cascading)
+    if (!insightsIncludeLms) {
+      rows = rows.filter((r) => r.site === "resale");
     }
-    if (skip !== "stadium" && insightsFilters.stadium !== "All") {
-      rows = rows.filter((r) => r.stadium === insightsFilters.stadium);
+    if (skip !== "game" && filterActive(insightsFilters.game)) {
+      rows = rows.filter((r) => insightsFilters.game.has(r.performance_id));
     }
-    if (skip !== "team" && insightsFilters.team !== "All") {
-      rows = rows.filter((r) => rowMatchesTeam(r, insightsFilters.team));
+    if (skip !== "stadium" && filterActive(insightsFilters.stadium)) {
+      rows = rows.filter((r) => insightsFilters.stadium.has(r.city));
     }
-    if (skip !== "category" && insightsFilters.category !== "All") {
-      rows = rows.filter((r) => r.category === insightsFilters.category);
+    if (skip !== "team" && filterActive(insightsFilters.team)) {
+      rows = rows.filter((r) => rowTeams(r).some((t) => insightsFilters.team.has(t)));
+    }
+    if (skip !== "category" && filterActive(insightsFilters.category)) {
+      rows = rows.filter((r) => insightsFilters.category.has(r.category));
     }
     return rows;
   }
@@ -2139,33 +2368,39 @@ function renderInsightsChart() {
   for (const r of gamePool) {
     if (!seen.has(r.performance_id) && r.match_number) {
       seen.add(r.performance_id);
-      gameOptions.push({ id: r.performance_id, label: `${r.match_number} \u00B7 ${r.teams || ""}` });
+      let gameLabel;
+      if (r.home_team && r.away_team) {
+        gameLabel = `#${r.match_number} \u00B7 ${r.home_team} vs ${r.away_team}`;
+      } else {
+        // Knockout: show stage + matchup code (e.g. "R32 · 2A v 2B")
+        const stageShort = { "QF": "R8", "Final": "F", "Bronze": "3rd" }[r.stage] || r.stage || "";
+        const matchup = r.matchup || "TBD";
+        gameLabel = `#${r.match_number} \u00B7 ${stageShort} \u00B7 ${matchup}`;
+      }
+      gameOptions.push({ id: r.performance_id, label: gameLabel, num: r.match_number });
     }
   }
-  gameOptions.sort((a, b) => {
-    const na = parseInt(a.label.replace(/\D/g, "")) || 0;
-    const nb = parseInt(b.label.replace(/\D/g, "")) || 0;
-    return na - nb;
-  });
+  gameOptions.sort((a, b) => a.num - b.num);
 
   const stadiumPool = applyFiltersExcept("stadium");
-  const stadiums = [...new Set(stadiumPool.map((r) => r.stadium).filter(Boolean))].sort();
+  const stadiums = [...new Set(stadiumPool.map((r) => r.city).filter(Boolean))].sort();
 
   const teamPool = applyFiltersExcept("team");
   const teamSet = new Set();
   for (const r of teamPool) {
-    for (const t of splitTeams(r.teams)) teamSet.add(t);
+    for (const t of rowTeams(r)) teamSet.add(t);
   }
   const individualTeams = [...teamSet].sort();
 
   const categoryPool = applyFiltersExcept("category");
   const categories = [...new Set(categoryPool.map((r) => r.category).filter(Boolean))].sort();
 
-  // Reset any filter whose current value is no longer in the available options
-  if (insightsFilters.game !== "All" && !gameOptions.some((g) => g.id === insightsFilters.game)) insightsFilters.game = "All";
-  if (insightsFilters.stadium !== "All" && !stadiums.includes(insightsFilters.stadium)) insightsFilters.stadium = "All";
-  if (insightsFilters.team !== "All" && !individualTeams.includes(insightsFilters.team)) insightsFilters.team = "All";
-  if (insightsFilters.category !== "All" && !categories.includes(insightsFilters.category)) insightsFilters.category = "All";
+  // Prune any stale selections that are no longer in available options
+  const gameIds = new Set(gameOptions.map((g) => g.id));
+  for (const v of insightsFilters.game) { if (!gameIds.has(v)) insightsFilters.game.delete(v); }
+  for (const v of insightsFilters.stadium) { if (!stadiums.includes(v)) insightsFilters.stadium.delete(v); }
+  for (const v of insightsFilters.team) { if (!individualTeams.includes(v)) insightsFilters.team.delete(v); }
+  for (const v of insightsFilters.category) { if (!categories.includes(v)) insightsFilters.category.delete(v); }
 
   // Final filtered set (all filters applied)
   const filtered = applyFiltersExcept(null);
@@ -2174,12 +2409,17 @@ function renderInsightsChart() {
   const byDate = {};
   for (const r of filtered) {
     const d = r.scan_date;
-    if (!byDate[d]) byDate[d] = { weightedSum: 0, totalWeight: 0, totalSeats: 0, bottom15Count: 0 };
+    if (!byDate[d]) byDate[d] = { weightedSum: 0, totalWeight: 0, totalSeats: 0, bottom15Count: 0, seenMatches: new Set() };
     const w = r.seats_in_bottom_15 || 1;
     byDate[d].weightedSum += Number(r.avg_priced_to_sell) * w;
     byDate[d].totalWeight += w;
-    byDate[d].totalSeats += r.total_seats || 0;
     byDate[d].bottom15Count += r.seats_in_bottom_15 || 0;
+    // Deduplicate total_seats by match+day (each category row has the same match-wide total)
+    const matchKey = r.performance_id;
+    if (!byDate[d].seenMatches.has(matchKey)) {
+      byDate[d].seenMatches.add(matchKey);
+      byDate[d].totalSeats += r.total_seats || 0;
+    }
   }
 
   // Build 7-day array (oldest first)
@@ -2204,13 +2444,21 @@ function renderInsightsChart() {
   }
   const priceRange = maxPrice - minPrice;
 
+  // Dampen color range when spread is small relative to avg price
+  // e.g. $3,200-$3,400 is only 6% spread — shouldn't go full black
+  const avgPrice = withData.length > 0 ? withData.reduce((s, b) => s + b.avg, 0) / withData.length : 1;
+  const spreadPct = avgPrice > 0 ? priceRange / avgPrice : 0;
+  // Cap the color intensity: full range only when spread > 30%, otherwise scale down
+  const colorScale = Math.min(1, spreadPct / 0.30);
+
   for (const bar of bars) {
     if (bar.avg <= 0) {
       bar.color = null; // no data
     } else if (priceRange === 0) {
       bar.color = insightsBarColor(0); // all same → green
     } else {
-      bar.color = insightsBarColor((bar.avg - minPrice) / priceRange);
+      const t = ((bar.avg - minPrice) / priceRange) * colorScale;
+      bar.color = insightsBarColor(t);
     }
     bar.limited = bar.totalSeats > 0 && bar.totalSeats < 5;
   }
@@ -2218,35 +2466,59 @@ function renderInsightsChart() {
   // Y-axis max (round up to nearest nice number)
   const yMax = maxPrice > 0 ? Math.ceil(maxPrice / 100) * 100 : 100;
 
-  // Format date label: "Apr 10"
+  // Format date label: "Apr 10" or "Current" for today
   const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const todayStr = new Date().toISOString().split("T")[0];
   function fmtDate(d) {
+    if (d === todayStr) return "Current";
+    const p = d.split("-");
+    return months[parseInt(p[1]) - 1] + " " + parseInt(p[2]);
+  }
+  function fmtDateLabel(d) {
+    if (d === todayStr) return `Current<br><span class="date-sub">Earlier Today</span>`;
     const p = d.split("-");
     return months[parseInt(p[1]) - 1] + " " + parseInt(p[2]);
   }
 
   // Active filter context string
+  function filterLabel(filterSet, allLabel, options) {
+    if (filterSet.size === 0) return allLabel;
+    if (options) return options.filter((o) => filterSet.has(o.id)).map((o) => o.label).join(", ");
+    return [...filterSet].join(", ");
+  }
   const filterCtx = [
-    insightsFilters.game === "All" ? "All games" : gameOptions.find((g) => g.id === insightsFilters.game)?.label || "",
-    insightsFilters.stadium === "All" ? "All stadiums" : insightsFilters.stadium,
-    insightsFilters.team === "All" ? "All teams" : insightsFilters.team,
-    insightsFilters.category === "All" ? "All categories" : insightsFilters.category,
+    filterLabel(insightsFilters.game, "All games", gameOptions),
+    filterLabel(insightsFilters.stadium, "All cities"),
+    filterLabel(insightsFilters.team, "All teams"),
+    filterLabel(insightsFilters.category, "All categories"),
   ].join(" \u00B7 ");
 
   // Build bar HTML
   const CHART_HEIGHT = 200;
   let barsHtml = "";
-  for (const bar of bars) {
+  for (let i = 0; i < bars.length; i++) {
+    const bar = bars[i];
     if (bar.avg <= 0) {
       barsHtml += `
         <div class="chart-bar-slot">
           <div class="chart-bar-value-label">&nbsp;</div>
+          <div class="chart-bar-pct-label">&nbsp;</div>
           <div class="chart-bar-wrapper" style="height:${CHART_HEIGHT}px;">
             <div class="chart-bar-nodata">No data</div>
           </div>
-          <div class="chart-bar-date">${fmtDate(bar.date)}</div>
+          <div class="chart-bar-date">${fmtDateLabel(bar.date)}</div>
         </div>`;
       continue;
+    }
+
+    // Day-over-day % change
+    let pctChangeHtml = "&nbsp;";
+    const prev = i > 0 ? bars[i - 1] : null;
+    if (prev && prev.avg > 0) {
+      const change = ((bar.avg - prev.avg) / prev.avg * 100).toFixed(1);
+      const sign = change > 0 ? "+" : "";
+      const cls = change < 0 ? "pct-down" : change > 0 ? "pct-up" : "pct-flat";
+      pctChangeHtml = `<span class="${cls}">${sign}${change}%</span>`;
     }
 
     const pct = (bar.avg / yMax) * 100;
@@ -2264,10 +2536,11 @@ function renderInsightsChart() {
     barsHtml += `
       <div class="chart-bar-slot">
         <div class="chart-bar-value-label">$${formatPrice(bar.avg)}</div>
+        <div class="chart-bar-pct-label">${pctChangeHtml}</div>
         <div class="chart-bar-wrapper" style="height:${CHART_HEIGHT}px;">
           <div class="chart-bar" style="height:${pct}%;background:${bar.color};opacity:${opacity};" title="${escapeHtml(tooltip)}"></div>
         </div>
-        <div class="chart-bar-date">${fmtDate(bar.date)}</div>
+        <div class="chart-bar-date">${fmtDateLabel(bar.date)}</div>
       </div>`;
   }
 
@@ -2276,51 +2549,121 @@ function renderInsightsChart() {
     barsHtml = `<div class="insights-empty">No data for the selected filters.</div>`;
   }
 
+  // Build multi-select filter dropdown HTML
+  function multiFilterHtml(id, allLabel, options, filterSet) {
+    // options = [{ value, label }]
+    const count = filterSet.size;
+    const btnLabel = count === 0 ? allLabel
+      : count === 1 ? (options.find((o) => o.value === [...filterSet][0])?.label || [...filterSet][0])
+      : `${count} selected`;
+    const items = options.map((o) => {
+      const checked = filterSet.has(o.value) ? "checked" : "";
+      return `<label class="mf-item"><input type="checkbox" value="${escapeHtml(o.value)}" ${checked}><span>${escapeHtml(o.label)}</span></label>`;
+    }).join("");
+    return `
+      <div class="mf-wrap" id="${id}">
+        <button class="mf-btn ${count > 0 ? 'mf-active' : ''}" type="button">${escapeHtml(btnLabel)}</button>
+        <div class="mf-dropdown">${items}</div>
+      </div>`;
+  }
+
+  const gameItems = gameOptions.map((g) => ({ value: g.id, label: g.label }));
+  const stadiumItems = stadiums.map((s) => ({ value: s, label: s }));
+  const teamItems = individualTeams.map((t) => ({ value: t, label: t }));
+  const categoryItems = categories.map((c) => ({ value: c, label: c }));
+
+  // Build chart content based on selected type
+  let chartHtml = "";
+  let chartSubtitle = "";
+  let chartInfo = "";
+  if (insightsChartType === "wall-movement") {
+    chartSubtitle = "Darker bands = price walls. Watch for bands drifting down.";
+    chartInfo = "Each cell shows what percentage of that day's listings sit in that price range. Dark bands are price walls \u2014 where sellers cluster. If a band drifts downward over time, sellers are lowering their ask (capitulating).\n\nCrowdsourced from the Ticket Scout community. Each column uses the last scan from that day (UTC). Data refreshed hourly.";
+    chartHtml = buildWallHeatmap(filtered, dates, fmtDate, fmtDateLabel);
+  } else {
+    chartSubtitle = "Avg &ldquo;priced to sell&rdquo; &mdash; bottom 15% of seats, last 7 days";
+    chartInfo = "Takes the cheapest 15% of listings for each match and averages them. This represents what motivated sellers are actually asking \u2014 the price you'd realistically pay if you acted now. Computed per category when filtered.\n\nCrowdsourced from the Ticket Scout community. Each column uses the last scan from that day (UTC). Data refreshed hourly.";
+    chartHtml = `<div class="chart-bars">${barsHtml}</div>`;
+  }
+
   container.innerHTML = `
     <div class="insights-filters">
-      <select id="insightsFilterGame" class="insights-select">
-        <option value="All">All games</option>
-        ${gameOptions.map((g) => `<option value="${escapeHtml(g.id)}" ${insightsFilters.game === g.id ? "selected" : ""}>${escapeHtml(g.label)}</option>`).join("")}
-      </select>
-      <select id="insightsFilterStadium" class="insights-select">
-        <option value="All">All stadiums</option>
-        ${stadiums.map((s) => `<option value="${escapeHtml(s)}" ${insightsFilters.stadium === s ? "selected" : ""}>${escapeHtml(s)}</option>`).join("")}
-      </select>
-      <select id="insightsFilterTeam" class="insights-select">
-        <option value="All">All teams</option>
-        ${individualTeams.map((t) => `<option value="${escapeHtml(t)}" ${insightsFilters.team === t ? "selected" : ""}>${escapeHtml(t)}</option>`).join("")}
-      </select>
-      <select id="insightsFilterCategory" class="insights-select">
-        <option value="All">All categories</option>
-        ${categories.map((c) => `<option value="${escapeHtml(c)}" ${insightsFilters.category === c ? "selected" : ""}>${escapeHtml(c)}</option>`).join("")}
-      </select>
+      ${multiFilterHtml("mfGame", "All games", gameItems, insightsFilters.game)}
+      ${multiFilterHtml("mfStadium", "All cities", stadiumItems, insightsFilters.stadium)}
+      ${multiFilterHtml("mfTeam", "All teams", teamItems, insightsFilters.team)}
+      ${multiFilterHtml("mfCategory", "All categories", categoryItems, insightsFilters.category)}
+      <label class="lms-toggle"><input type="checkbox" id="insightsLmsToggle" ${insightsIncludeLms ? "checked" : ""}> Include Last Minute Sales site</label>
     </div>
     <div class="insights-header">
-      <h2>Market Insights</h2>
-      <p class="insights-subtitle">Avg "priced to sell" &mdash; bottom 15% of seats, last 7 days</p>
+      <div class="insights-header-row">
+        <h2>Market Insights <button class="info-btn" id="insightsInfoBtn" type="button">i</button></h2>
+        <select id="insightsChartType" class="insights-chart-select">
+          <option value="priced-to-sell" ${insightsChartType === "priced-to-sell" ? "selected" : ""}>Avg "Priced to Sell"</option>
+          <option value="wall-movement" ${insightsChartType === "wall-movement" ? "selected" : ""}>Wall Movement</option>
+        </select>
+      </div>
+      <p class="insights-subtitle">${chartSubtitle}</p>
+      <div class="info-panel" id="insightsInfoPanel" style="display:none;">${escapeHtml(chartInfo)}</div>
     </div>
-    <div class="insights-chart">
-      <div class="chart-bars">${barsHtml}</div>
-    </div>
+    <div class="insights-chart">${chartHtml}</div>
   `;
 
-  // Bind filter handlers
-  document.getElementById("insightsFilterGame").addEventListener("change", (e) => {
-    insightsFilters.game = e.target.value;
+  // Bind multi-filter handlers
+  function bindMultiFilter(wrapperId, filterKey) {
+    const wrap = document.getElementById(wrapperId);
+    const btn = wrap.querySelector(".mf-btn");
+    const dropdown = wrap.querySelector(".mf-dropdown");
+
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      // Close all other open dropdowns
+      container.querySelectorAll(".mf-dropdown.open").forEach((d) => {
+        if (d !== dropdown) d.classList.remove("open");
+      });
+      dropdown.classList.toggle("open");
+    });
+
+    dropdown.addEventListener("change", (e) => {
+      const val = e.target.value;
+      if (e.target.checked) {
+        insightsFilters[filterKey].add(val);
+      } else {
+        insightsFilters[filterKey].delete(val);
+      }
+      renderInsightsChart();
+    });
+
+    // Prevent dropdown clicks from closing it
+    dropdown.addEventListener("click", (e) => e.stopPropagation());
+  }
+
+  bindMultiFilter("mfGame", "game");
+  bindMultiFilter("mfStadium", "stadium");
+  bindMultiFilter("mfTeam", "team");
+  bindMultiFilter("mfCategory", "category");
+
+  // LMS toggle
+  document.getElementById("insightsLmsToggle").addEventListener("change", (e) => {
+    insightsIncludeLms = e.target.checked;
     renderInsightsChart();
   });
-  document.getElementById("insightsFilterStadium").addEventListener("change", (e) => {
-    insightsFilters.stadium = e.target.value;
+
+  // Chart type switcher
+  document.getElementById("insightsChartType").addEventListener("change", (e) => {
+    insightsChartType = e.target.value;
     renderInsightsChart();
   });
-  document.getElementById("insightsFilterTeam").addEventListener("change", (e) => {
-    insightsFilters.team = e.target.value;
-    renderInsightsChart();
+
+  // Info button toggle
+  document.getElementById("insightsInfoBtn").addEventListener("click", () => {
+    const panel = document.getElementById("insightsInfoPanel");
+    panel.style.display = panel.style.display === "none" ? "block" : "none";
   });
-  document.getElementById("insightsFilterCategory").addEventListener("change", (e) => {
-    insightsFilters.category = e.target.value;
-    renderInsightsChart();
-  });
+
+  // Close dropdowns when clicking outside
+  document.addEventListener("click", () => {
+    container.querySelectorAll(".mf-dropdown.open").forEach((d) => d.classList.remove("open"));
+  }, { once: true });
 
   // Animate bars in
   requestAnimationFrame(() => {
