@@ -10,3 +10,4 @@ supabase/.temp/
 notes/
 fifa-ticket-scout-*.zip
 supabase/migrate_*.sql
+supabase/seed_*.sql
