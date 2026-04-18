@@ -4,7 +4,7 @@ All notable changes to FIFA Ticket Scout are documented here. Timestamps are in 
 
 ---
 
-## April 18, 2026
+## April 18, 2026 — v2.3.0
 
 ### Insights Tab — Market Insights with Two Chart Types
 
