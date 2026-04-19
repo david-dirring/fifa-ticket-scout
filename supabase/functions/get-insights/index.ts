@@ -5,7 +5,15 @@ const supabase = createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 );
 
-const PRODUCT_ID = "HEzB2VDD6QMDXaFiynXo5w==";
+const PRODUCTS = [
+  { productId: "qQRSGWNOL13FKrC3bHvmkA==",  level: 10 },  // Scout Pro
+  { productId: "_EOsxJwpud5MDG4IX3a-Ig==",   level: 20 },  // Pro + Web
+  { productId: "HEzB2VDD6QMDXaFiynXo5w==",   level: 30 },  // Pro + Web + Alerts
+];
+const MIN_INSIGHTS_LEVEL = 20;
+const INSIGHTS_PRODUCT_IDS = PRODUCTS
+  .filter((p) => p.level >= MIN_INSIGHTS_LEVEL)
+  .map((p) => p.productId);
 const GUMROAD_VERIFY_URL = "https://api.gumroad.com/v2/licenses/verify";
 
 function jsonResponse(body: any, status = 200) {
@@ -28,19 +36,26 @@ Deno.serve(async (req) => {
       return jsonResponse({ ok: false, error: "Missing license key" }, 400);
     }
 
-    // --- Verify license with Gumroad (must be tier 30) ---
-    const verifyResp = await fetch(GUMROAD_VERIFY_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        product_id: PRODUCT_ID,
-        license_key: licenseKey.trim(),
-        increment_uses_count: "false",
-      }),
-    });
-    const verifyResult = await verifyResp.json();
+    // --- Verify license with Gumroad (must be level 20+) ---
+    let verified = false;
+    for (const productId of INSIGHTS_PRODUCT_IDS) {
+      const verifyResp = await fetch(GUMROAD_VERIFY_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          product_id: productId,
+          license_key: licenseKey.trim(),
+          increment_uses_count: "false",
+        }),
+      });
+      const verifyResult = await verifyResp.json();
+      if (verifyResult.success) {
+        verified = true;
+        break;
+      }
+    }
 
-    if (!verifyResult.success) {
+    if (!verified) {
       return jsonResponse(
         { ok: false, error: "License not valid for Insights tier" },
         403
