@@ -1524,14 +1524,20 @@ function isPickDeal(pick, fv) {
   return false;
 }
 
-function sliderConfigForMode(mode) {
+function sliderConfigForMode(mode, currentValue) {
   if (mode === "dollarOffset") {
-    return { min: -500, max: 3000, step: 100, leftLabel: "-$500", midLabel: "Face", rightLabel: "+$3000" };
+    let max = 3000;
+    if (currentValue != null && currentValue > max) max = Math.ceil(currentValue / 500) * 500;
+    return { min: -500, max, step: 100, leftLabel: "-$500", midLabel: "Face", rightLabel: `+$${max}` };
   }
   if (mode === "absolute") {
-    return { min: 0, max: 5000, step: 50, leftLabel: "$0", midLabel: "", rightLabel: "$5000" };
+    let max = 10000;
+    if (currentValue != null && currentValue > max) max = Math.ceil(currentValue / 1000) * 1000;
+    return { min: 0, max, step: 50, leftLabel: "$0", midLabel: "", rightLabel: `$${max}` };
   }
-  return { min: -50, max: 300, step: 5, leftLabel: "-50%", midLabel: "Face", rightLabel: "+300%" };
+  let max = 300;
+  if (currentValue != null && currentValue > max) max = Math.ceil(currentValue / 50) * 50;
+  return { min: -50, max, step: 5, leftLabel: "-50%", midLabel: "Face", rightLabel: `+${max}%` };
 }
 
 function sliderValueForMode(pick) {
@@ -1561,8 +1567,8 @@ function renderThresholdDrawer(pick, locked) {
   const catFv = getFaceValueForCategory(pick.match_number, category);
   const example = buildSliderExample(pick, catFv);
   const isDeal = isPickDeal(pick, catFv);
-  const cfg = sliderConfigForMode(mode);
   const val = sliderValueForMode(pick);
+  const cfg = sliderConfigForMode(mode, val);
   const valLabel = sliderLabelForMode(pick);
   const fillPct = sliderFillPct(val, cfg.min, cfg.max);
 
@@ -1575,7 +1581,7 @@ function renderThresholdDrawer(pick, locked) {
         <button class="mode-pill ${mode === "absolute" ? "active" : ""}" data-mode="absolute">Absolute $</button>
       </div>
       <div class="threshold-slider-wrap ${isDeal ? 'is-deal' : ''}">
-        <div class="slider-value-display" id="sliderVal-${pick.match_number}">${valLabel}</div>
+        <div class="slider-value-display" id="sliderVal-${pick.match_number}" title="Click to type exact value">${valLabel}</div>
         <input type="range" class="threshold-slider" data-field="${mode}"
           min="${cfg.min}" max="${cfg.max}" step="${cfg.step}" value="${val}"
           style="--fill: ${fillPct}%">
@@ -1652,10 +1658,46 @@ function wireThresholdDrawer() {
         const fv = getFaceValueForCategory(matchNum, prefs.category);
         if (exampleEl) exampleEl.textContent = buildSliderExample(prefs, fv);
         if (wrap) wrap.classList.toggle("is-deal", isPickDeal(prefs, fv));
-        const cfg = sliderConfigForMode(mode);
+        const cfg = sliderConfigForMode(mode, v);
         slider.style.setProperty("--fill", sliderFillPct(v, cfg.min, cfg.max) + "%");
       });
       slider.addEventListener("change", () => renderPickSlots());
+    }
+
+    // Click-to-edit on value display
+    if (valEl) {
+      valEl.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (valEl.querySelector("input")) return; // already editing
+        const mode = prefs.thresholdMode || "percent";
+        const raw = sliderValueForMode(prefs);
+        const input = document.createElement("input");
+        input.type = "number";
+        input.className = "slider-value-input";
+        input.value = raw;
+        if (mode === "percent") { input.min = -100; input.step = 1; }
+        else if (mode === "dollarOffset") { input.step = 1; }
+        else { input.min = 0; input.step = 1; }
+        valEl.textContent = "";
+        valEl.appendChild(input);
+        input.focus();
+        input.select();
+
+        function commit() {
+          const v = parseInt(input.value);
+          if (isNaN(v)) { renderPickSlots(); return; }
+          if (mode === "dollarOffset") prefs.dollarOffset = v;
+          else if (mode === "absolute") prefs.absolute = Math.max(0, v);
+          else prefs.percentOfFace = v;
+          selectedAlertGames.set(matchNum, prefs);
+          renderPickSlots();
+        }
+        input.addEventListener("blur", commit);
+        input.addEventListener("keydown", (ke) => {
+          if (ke.key === "Enter") { ke.preventDefault(); input.blur(); }
+          if (ke.key === "Escape") { renderPickSlots(); }
+        });
+      });
     }
 
     // Category pills

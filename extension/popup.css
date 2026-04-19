@@ -1021,6 +1021,28 @@ body {
   color: var(--gray-900);
   margin-bottom: 6px;
   letter-spacing: 0.2px;
+  cursor: pointer;
+  border-bottom: 1px dashed transparent;
+  transition: border-color 0.15s;
+}
+.slider-value-display:hover {
+  border-bottom-color: #9ca3af;
+}
+.slider-value-input {
+  width: 80px;
+  font-size: 18px;
+  font-weight: 800;
+  text-align: center;
+  border: 1px solid #1a3d8f;
+  border-radius: 4px;
+  padding: 2px 4px;
+  outline: none;
+  -moz-appearance: textfield;
+}
+.slider-value-input::-webkit-inner-spin-button,
+.slider-value-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 
 .is-deal .slider-value-display {
