@@ -10,6 +10,13 @@ document.addEventListener("DOMContentLoaded", () => {
     renderLicenseSection(resp?.license);
   });
 
+  // Read max_picks from scan_config (fetched from GitHub by background.js)
+  chrome.storage.local.get("scanConfig", (data) => {
+    if (typeof data.scanConfig?.max_picks === "number") {
+      maxPicks = data.scanConfig.max_picks;
+    }
+  });
+
   // Check for updates
   checkForUpdate();
 
@@ -1096,9 +1103,8 @@ let faceValueMap = {}; // match_number -> { cat1, cat2, cat3 }
 let selectedAlertGames = new Map(); // match_number -> prefs
 let alertFilters = { search: "", stages: new Set(["All"]), countries: new Set() };
 let expandedDrawer = null; // match_number of currently open drawer
-// Pick limit + per-pick lock state. Both come from the get-alerts response on
-// every render so the server is the single source of truth for MAX_PICKS;
-// fallback default is 3 if the server response hasn't loaded yet.
+// Pick limit + per-pick lock state. maxPicks is read from scan_config.json
+// (fetched from GitHub on startup) with a fallback default of 3.
 let maxPicks = 3;
 let lockedMatchNumbers = new Set(); // match_numbers that came from saved config
 
@@ -1273,10 +1279,8 @@ function fetchAlertsFromCloud() {
 }
 
 function renderAlertsForm(container, savedConfig, opts) {
-  // Pull MAX_PICKS from the server response (fallback to current value).
   // Build the per-pick lock set from the saved config — a pick is "locked"
   // if it was already in the saved config when this form rendered.
-  if (typeof savedConfig?.maxPicks === "number") maxPicks = savedConfig.maxPicks;
   lockedMatchNumbers = new Set((savedConfig?.games || []).map((g) => g.match_number));
 
   const savedEmail = savedConfig?.email || "";
