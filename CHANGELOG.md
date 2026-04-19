@@ -4,6 +4,20 @@ All notable changes to FIFA Ticket Scout are documented here. Timestamps are in 
 
 ---
 
+## April 19, 2026 — v2.3.2
+
+### Fix: Insights Tab Rejecting Pro + Web Licenses
+
+The `get-insights` Edge Function was hardcoded to verify against the Pro + Web + Alerts product ID (level 30), so Pro + Web users (level 20) passed the client-side check but got "License not valid for Insights tier" from the server. Fixed to accept any license level 20+.
+
+### Remote Max Alerts Control
+
+The per-user alert pick limit (`maxPicks`) is now read from `scan_config.json` in the public GitHub repo instead of being hardcoded server-side. To change the limit, edit `max_picks` in `scan_config.json` and push — no Edge Function redeploy or extension update needed. Server-side `MAX_PICKS` raised to 10 as a safety ceiling only.
+
+**Files changed:** `supabase/functions/get-insights/index.ts`, `supabase/functions/_shared/alert_constants.ts`, `extension/popup.js`, `extension/manifest.json`
+
+---
+
 ## April 18, 2026 — v2.3.1
 
 ### Fix: Map Zoom Triggering DataDome Block
