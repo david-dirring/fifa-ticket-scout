@@ -1103,21 +1103,9 @@ let faceValueMap = {}; // match_number -> { cat1, cat2, cat3 }
 let selectedAlertGames = new Map(); // match_number -> prefs
 let alertFilters = { search: "", stages: new Set(["All"]), countries: new Set() };
 let expandedDrawer = null; // match_number of currently open drawer
-// Pick limit + per-pick lock state. maxPicks is read from scan_config.json
+// Pick limit. maxPicks is read from scan_config.json
 // (fetched from GitHub on startup) with a fallback default of 3.
 let maxPicks = 3;
-let lockedMatchNumbers = new Set(); // match_numbers that came from saved config
-
-function isPickLocked(matchNumber) {
-  return lockedMatchNumbers.has(matchNumber);
-}
-
-function hasAnyUnlockedPick() {
-  for (const pick of selectedAlertGames.values()) {
-    if (!isPickLocked(pick.match_number)) return true;
-  }
-  return false;
-}
 
 // City → host country
 const CITY_COUNTRY = {
@@ -1279,14 +1267,9 @@ function fetchAlertsFromCloud() {
 }
 
 function renderAlertsForm(container, savedConfig, opts) {
-  // Build the per-pick lock set from the saved config — a pick is "locked"
-  // if it was already in the saved config when this form rendered.
-  lockedMatchNumbers = new Set((savedConfig?.games || []).map((g) => g.match_number));
-
   const savedEmail = savedConfig?.email || "";
   const count = selectedAlertGames.size;
   const slotsAvailable = count < maxPicks;
-  const hasUnlocked = hasAnyUnlockedPick();
   const offline = opts?.offline === true;
 
   container.innerHTML = `
@@ -1297,7 +1280,7 @@ function renderAlertsForm(container, savedConfig, opts) {
     </div>
     ${slotsAvailable ? `
     <div class="alerts-warning">
-      <strong>Choose your matches carefully.</strong> Once you hit the <strong>+</strong> button on a match and save, that pick is final &mdash; only the price threshold can change later.
+      You can swap your picks anytime &mdash; just remove a match and add a new one.
     </div>
     ` : ''}
 
@@ -1340,7 +1323,7 @@ function renderAlertsForm(container, savedConfig, opts) {
     <div id="alertsMsg"></div>
 
     <button class="btn-save-alerts" id="saveAlertsBtn" ${count === 0 ? "disabled" : ""}>
-      ${hasUnlocked ? `Save my ${count} pick${count !== 1 ? "s" : ""}` : "Update Price Thresholds"}
+      Save my ${count} pick${count !== 1 ? "s" : ""}
     </button>
   `;
 
@@ -1366,7 +1349,6 @@ function renderPickSlots() {
     if (!pick) {
       return `<div class="pick-slot pick-slot-empty">+ Add pick ${n}</div>`;
     }
-    const locked = isPickLocked(pick.match_number);
     const match = matchList.find((m) => m.match_number === pick.match_number);
     if (!match) return "";
     const teams = (match.home_team && match.away_team)
@@ -1380,13 +1362,13 @@ function renderPickSlots() {
       <div class="pick-slot ${isExpanded ? 'expanded' : ''}" data-match="${pick.match_number}">
         <div class="pick-slot-header">
           <div class="pick-slot-info">
-            <div class="pick-slot-teams">#${pick.match_number} &middot; ${escapeHtml(teams)} ${locked ? '<span class="lock-inline">&#x1F512;</span>' : ''}</div>
+            <div class="pick-slot-teams">#${pick.match_number} &middot; ${escapeHtml(teams)}</div>
             <div class="pick-slot-meta">${escapeHtml(match.city || "")} &middot; ${escapeHtml(match.stage || "")} &middot; ${dateStr}</div>
             <div class="pick-summary">${summary}</div>
           </div>
           <button class="pick-edit-btn" data-edit="${pick.match_number}">${isExpanded ? 'Close' : 'Edit'}</button>
         </div>
-        ${isExpanded ? renderThresholdDrawer(pick, locked) : ""}
+        ${isExpanded ? renderThresholdDrawer(pick) : ""}
       </div>
     `;
   }).join("");
@@ -1560,7 +1542,7 @@ function sliderLabelForMode(pick) {
   return formatPercentLabel(pick.percentOfFace || 0);
 }
 
-function renderThresholdDrawer(pick, locked) {
+function renderThresholdDrawer(pick) {
   const category = pick.category || "any";
   const seats = pick.seats || 2;
   const mode = pick.thresholdMode || "percent";
@@ -1608,11 +1590,9 @@ function renderThresholdDrawer(pick, locked) {
         <button class="step-btn" data-step="+1">+</button>
       </div>
 
-      ${!locked ? `
       <div class="drawer-actions">
         <button class="drawer-remove" data-remove="${pick.match_number}">Remove pick</button>
       </div>
-      ` : ""}
     </div>
   `;
 }
@@ -1908,17 +1888,6 @@ function handleSaveAlerts() {
       return;
     }
 
-    // Confirm only when we're about to lock at least one NEW pick.
-    // Threshold-only updates (all picks already locked) skip the dialog.
-    if (hasAnyUnlockedPick()) {
-      const confirmed = confirm(
-        "Lock in these matches?\n\n" +
-        "To keep alerts for true fans, the matches you pick are permanent.\n\n" +
-        "You can still adjust price, category, and seats anytime — just not the matches themselves."
-      );
-      if (!confirmed) return;
-    }
-
     // Compute effective threshold per game from the threshold mode/value
     const games = Array.from(selectedAlertGames.values()).map((prefs) => {
       const threshold = computeThresholdForPick(prefs);
@@ -1957,7 +1926,7 @@ function handleSaveAlerts() {
         } else {
           msgEl.innerHTML = `<div class="alerts-msg error">${resp?.error || "Save failed. Try again."}</div>`;
           btn.disabled = false;
-          btn.textContent = hasAnyUnlockedPick() ? "Save my picks" : "Update Price Thresholds";
+          btn.textContent = "Save my picks";
         }
       }
     );

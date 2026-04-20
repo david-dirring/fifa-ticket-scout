@@ -64,7 +64,7 @@ Deno.serve(async (req) => {
     // --- Read the user's saved alert config ---
     const { data: row, error: selectError } = await supabase
       .from("alert_configs")
-      .select("email, games, games_locked, created_at, updated_at, expires_at")
+      .select("email, games, created_at, updated_at, expires_at")
       .eq("license_hash", licenseHash)
       .maybeSingle();
 
@@ -80,7 +80,6 @@ Deno.serve(async (req) => {
         ok: true,
         email: null,
         games: [],
-        gamesLocked: false,
         savedAt: null,
         updatedAt: null,
         expiresAt: null,
@@ -92,7 +91,6 @@ Deno.serve(async (req) => {
       ok: true,
       email: row.email,
       games: row.games || [],
-      gamesLocked: row.games_locked !== false,
       savedAt: row.created_at ? new Date(row.created_at).getTime() : null,
       updatedAt: row.updated_at ? new Date(row.updated_at).getTime() : null,
       expiresAt: row.expires_at ? new Date(row.expires_at).getTime() : null,

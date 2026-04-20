@@ -106,7 +106,7 @@ function syncToSupabase(gameKey, durationMs) {
 }
 
 async function fetchAlerts() {
-  // Cloud rehydrate path. Returns { ok: true, email, games, gamesLocked, savedAt, updatedAt }
+  // Cloud rehydrate path. Returns { ok: true, email, games, savedAt, updatedAt }
   // on success, or { ok: false, error } on failure. Does NOT write to
   // chrome.storage.local — the caller decides whether to cache the result
   // (so an offline fallback path can't accidentally clobber the canonical copy).
@@ -210,12 +210,11 @@ async function saveAlerts(payload) {
       alertConfigs: {
         email: payload.email,
         games: payload.games,
-        gamesLocked: result.gamesLocked !== false,
         savedAt: Date.now(),
       },
     });
 
-    return { ok: true, gamesLocked: result.gamesLocked !== false };
+    return { ok: true };
   } catch (err) {
     console.log("[FIFA Ticket Scout] saveAlerts error:", err.message);
     return { ok: false, error: "Could not reach server. Check your connection." };
