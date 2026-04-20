@@ -173,22 +173,10 @@ Deno.serve(async (req) => {
       console.error("scan_snapshots insert error:", snapError);
     }
 
-    // 2. Replace seats for this match+site (delete old, insert fresh)
-    // CRITICAL: scope by (site, performance_id) — a resale rescan must NOT wipe LMS seats
-    const { error: deleteError } = await supabase
-      .from("seats")
-      .delete()
-      .eq("site", site)
-      .eq("performance_id", performanceId);
-
-    if (deleteError) {
-      console.error("seats delete error:", deleteError);
-    }
-
-    const now = new Date().toISOString();
+    // 2. Atomically replace seats for this match+site
+    // Uses a Postgres function to upsert + delete-stale in one transaction,
+    // preventing race conditions when two scans of the same match overlap.
     const seatRows = cleanedEntries.map(([seatId, s]: [string, any]) => ({
-      site,
-      performance_id: performanceId,
       seat_id: seatId,
       block: s.block || null,
       area: s.area || null,
@@ -199,20 +187,16 @@ Deno.serve(async (req) => {
       price: s.price ?? null,
       color: s.color || null,
       exclusive: s.exclusive ?? true,
-      last_seen_at: now,
-      first_seen_at: now,
     }));
 
-    // Insert in chunks of 500
-    for (let i = 0; i < seatRows.length; i += 500) {
-      const chunk = seatRows.slice(i, i + 500);
-      const { error: seatError } = await supabase
-        .from("seats")
-        .insert(chunk);
+    const { error: replaceError } = await supabase.rpc("replace_seats", {
+      p_site: site,
+      p_performance_id: performanceId,
+      p_seats: seatRows,
+    });
 
-      if (seatError) {
-        console.error(`seats insert error (chunk ${i}):`, seatError);
-      }
+    if (replaceError) {
+      console.error("replace_seats error:", replaceError);
     }
 
     // 3. Recompute match_summary (scoped to this site — LMS prices must not leak into resale stats)

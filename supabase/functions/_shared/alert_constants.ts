@@ -10,3 +10,12 @@
 
 export const MAX_PICKS = 10;
 export const EXPIRES_DAYS = 180;
+
+// Per-license overrides for users who purchased extra alert slots.
+const PICKS_OVERRIDES: Record<string, number> = {
+  "95db5c16de55b58959bb6e84db8368b453ed3a614a8fb6d869f82d7660b561ed": 18,
+};
+
+export function getMaxPicks(licenseHash: string): number {
+  return PICKS_OVERRIDES[licenseHash] ?? MAX_PICKS;
+}

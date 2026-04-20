@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { MAX_PICKS } from "../_shared/alert_constants.ts";
+import { MAX_PICKS, getMaxPicks } from "../_shared/alert_constants.ts";
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -48,8 +48,13 @@ Deno.serve(async (req) => {
     if (/[,;\s]/.test(email)) {
       return jsonResponse({ ok: false, error: "Only one email address allowed" }, 400);
     }
-    if (!Array.isArray(games) || games.length === 0 || games.length > MAX_PICKS) {
-      return jsonResponse({ ok: false, error: `Must have 1-${MAX_PICKS} games` }, 400);
+
+    // Hash early so we can look up per-license pick limits before validation.
+    const licenseHash = await sha256(licenseKey.trim());
+    const effectiveMax = getMaxPicks(licenseHash);
+
+    if (!Array.isArray(games) || games.length === 0 || games.length > effectiveMax) {
+      return jsonResponse({ ok: false, error: `Must have 1-${effectiveMax} games` }, 400);
     }
 
     // Validate each game
@@ -80,9 +85,6 @@ Deno.serve(async (req) => {
         403
       );
     }
-
-    // --- Hash license server-side ---
-    const licenseHash = await sha256(licenseKey.trim());
 
     // --- Check for existing config ---
     const { data: existing } = await supabase
@@ -121,7 +123,7 @@ Deno.serve(async (req) => {
         .insert({ license_hash: licenseHash, email, games, action: "update" });
       if (historyError) console.error("history update error:", historyError);
 
-      return jsonResponse({ ok: true, maxPicks: MAX_PICKS });
+      return jsonResponse({ ok: true, maxPicks: effectiveMax });
     }
 
     // --- Insert new config ---
@@ -143,7 +145,7 @@ Deno.serve(async (req) => {
       .insert({ license_hash: licenseHash, email, games, action: "insert" });
     if (historyError) console.error("history insert error:", historyError);
 
-    return jsonResponse({ ok: true, maxPicks: MAX_PICKS });
+    return jsonResponse({ ok: true, maxPicks: effectiveMax });
   } catch (err) {
     console.error("save-alerts error:", err);
     return jsonResponse({ ok: false, error: "Server error" }, 500);

@@ -4,6 +4,18 @@ All notable changes to FIFA Ticket Scout are documented here. Timestamps are in 
 
 ---
 
+## April 20, 2026 — v2.3.4
+
+### Per-License Alert Pick Overrides
+
+Added server-side per-license `maxPicks` overrides so individual users can have a higher pick limit (upon additional purchases) without affecting everyone. The override map lives in `alert_constants.ts`; adding a new entry requires an edge function redeploy. The popup now reads the server-returned `maxPicks` from the `get-alerts` response, so overridden users see the correct slot count in the UI automatically.
+
+**Redeploy:** `supabase functions deploy save-alerts` and `supabase functions deploy get-alerts`
+
+**Files changed:** `supabase/functions/_shared/alert_constants.ts`, `supabase/functions/save-alerts/index.ts`, `supabase/functions/get-alerts/index.ts`, `extension/popup.js`, `extension/manifest.json`
+
+---
+
 ## April 19, 2026 — v2.3.3
 
 ### Allow Swapping Alert Game Picks + Increase to 6 Picks

@@ -1148,6 +1148,10 @@ function renderAlertsTab() {
     faceValueMap = buildFaceValueMap(faceValues || []);
 
     if (cloudConfig?.ok) {
+      // Server may return a per-license pick limit higher than scan_config default.
+      if (typeof cloudConfig.maxPicks === "number") {
+        maxPicks = cloudConfig.maxPicks;
+      }
       // Canonical: overwrite local cache with the server copy
       chrome.storage.local.set({ alertConfigs: cloudConfig });
       if (cloudConfig.games?.length) {
