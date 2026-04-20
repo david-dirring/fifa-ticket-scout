@@ -1,0 +1,13 @@
+{
+  "profiles": {
+    "aggressive": { "min": 0, "max": 0 },
+    "balanced": { "min": 600, "max": 1000 },
+    "cautious": { "min": 1200, "max": 1800 },
+    "stealth": { "min": 1300, "max": 2700 }
+  },
+  "tile_size": 10000,
+  "map_max": 40000,
+  "max_consecutive_blocks": 3,
+  "retry_cooldown_ms": 3000,
+  "max_picks": 6
+}
