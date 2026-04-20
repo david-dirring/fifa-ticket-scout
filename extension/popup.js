@@ -1104,8 +1104,8 @@ let selectedAlertGames = new Map(); // match_number -> prefs
 let alertFilters = { search: "", stages: new Set(["All"]), countries: new Set() };
 let expandedDrawer = null; // match_number of currently open drawer
 // Pick limit. maxPicks is read from scan_config.json
-// (fetched from GitHub on startup) with a fallback default of 3.
-let maxPicks = 3;
+// (fetched from GitHub on startup) with a fallback default of 6.
+let maxPicks = 6;
 
 // City → host country
 const CITY_COUNTRY = {

@@ -4,6 +4,18 @@ All notable changes to FIFA Ticket Scout are documented here. Timestamps are in 
 
 ---
 
+## April 19, 2026 — v2.3.3
+
+### Allow Swapping Alert Game Picks + Increase to 6 Picks
+
+Alert picks are no longer permanently locked after saving. Users can now remove a saved match and add a different one. Pick limit raised from 3 to 6. The email lock remains in place. Removed all per-pick lock enforcement from the backend (`save-alerts`) and lock UI from the frontend (lock icons, "picks are final" warning, confirmation dialog).
+
+**Note:** Also update `max_picks` to `6` in `scan_config.json` in the public repo.
+
+**Files changed:** `extension/popup.js`, `extension/background.js`, `supabase/functions/save-alerts/index.ts`, `supabase/functions/get-alerts/index.ts`
+
+---
+
 ## April 19, 2026 — v2.3.2
 
 ### Fix: Insights Tab Rejecting Pro + Web Licenses
