@@ -1,5 +1,5 @@
 {
-  "price_drops": {
+  "mobile": {
     "allowed_tiers": [20, 30]
   }
 }
