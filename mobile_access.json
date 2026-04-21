@@ -1,0 +1,5 @@
+{
+  "price_drops": {
+    "allowed_tiers": [20, 30]
+  }
+}
