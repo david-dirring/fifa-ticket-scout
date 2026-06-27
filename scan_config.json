@@ -9,5 +9,5 @@
   "map_max": 40000,
   "max_consecutive_blocks": 3,
   "retry_cooldown_ms": 3000,
-  "max_picks": 6
+  "max_picks": 10
 }
